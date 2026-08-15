@@ -21,3 +21,5 @@ template<typename T> void launch_bias_grad        (const T* gout, T* db, int M, 
 template<typename T> void launch_softmax_ce_forward (const T* Z, const int* labels, T* probs, T* lossp, int M, int C);
 template<typename T> void launch_softmax_ce_backward(const T* gscalar, const T* probs, const int* labels, T* dZ, int M, int C);
 template<typename T> void launch_sgd_update       (T* w, const T* g, T lr, std::size_t n);
+
+template<typename T, int K1, int K2> void launch_conv2d(const T* mat, const T* kernel, T* out, int N, int M);

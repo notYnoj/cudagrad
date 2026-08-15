@@ -68,7 +68,10 @@ namespace {
 
 template<typename T>
 void launch_matmul(const T* A, const T* B, T* C, int M, int N, int K) {
-    matmul_kernel<T><<<grid2d(N, M), BLOCK2D>>>(A, B, C, M, N, K);   
+    constexpr int TILE = 16;
+    dim3 block(TILE, TILE);
+    dim3 grid((N + TILE - 1) / TILE, (M + TILE - 1) / TILE);
+    matmul_kernel<T, TILE> << <grid, block >> > (A, B, C, M, N, K);
     check("matmul");
 }
 template<typename T>
@@ -112,6 +115,18 @@ void launch_sgd_update(T* w, const T* g, T lr, std::size_t n) {
     check("sgd_update");
 }
 
+
+template<typename T, int K1, int K2>
+void launch_conv2d(const T* mat, const T* kernel, T* out, int N, int M) {
+    constexpr int TILES = 16;
+    const int outRow = N - K1 + 1;
+    const int outCol = M - K2 + 1;
+    dim3 block(TILES, TILES);
+    dim3 grid((outCol + TILES - 1) / TILES, (outRow + TILES - 1) / TILES);
+    convolution_kernel<T, TILES, K1, K2><<<grid, block>>>(mat, kernel, out, N, M);
+    check("conv2d");
+}
+
 #define INSTANTIATE(T)                                                              \
     template void launch_add<T>(const T*, const T*, T*, std::size_t);               \
     template void launch_mul<T>(const T*, const T*, T*, std::size_t);               \
@@ -128,8 +143,19 @@ void launch_sgd_update(T* w, const T* g, T lr, std::size_t n) {
     template void launch_bias_grad<T>(const T*, T*, int, int);                      \
     template void launch_softmax_ce_forward<T>(const T*, const int*, T*, T*, int, int); \
     template void launch_softmax_ce_backward<T>(const T*, const T*, const int*, T*, int, int); \
-    template void launch_sgd_update<T>(T*, const T*, T, std::size_t);
+    template void launch_sgd_update<T>(T*, const T*, T, std::size_t); \
 
 INSTANTIATE(float)
 INSTANTIATE(double)
 #undef INSTANTIATE
+
+// conv2d carries extra compile-time template params (the kernel size), so it is
+// instantiated separately — one line per (dtype, K1, K2) the CNN uses.
+#define INSTANTIATE_CONV(T, K1, K2) \
+    template void launch_conv2d<T, K1, K2>(const T*, const T*, T*, int, int);
+
+INSTANTIATE_CONV(float, 3, 3)
+INSTANTIATE_CONV(float, 5, 5)
+INSTANTIATE_CONV(double, 3, 3)
+INSTANTIATE_CONV(double, 5, 5)
+#undef INSTANTIATE_CONV

@@ -107,6 +107,7 @@ NodePtr<T> relu(NodePtr<T> x) {
     return out;
 }
 
+//A is (M, K) and B is (K,N)
 template<typename T>
 NodePtr<T> matmul(NodePtr<T> a, NodePtr<T> b) {
     const int M = static_cast<int>(a->value.shape[0]);

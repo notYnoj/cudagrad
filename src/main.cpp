@@ -5,45 +5,21 @@
 #include "cudaTensor.cuh"
 #include "Node.cuh"
 #include "AutoGrad.cuh"
-
+#include "cudaLaunch.cuh"
 
 int main() {
-    //learns xor
-    Tensor<float> X(std::vector<long long>{ 4, 2 },
-        std::vector<float>{ 0, 0, 0, 1, 1, 0, 1, 1 });
-    std::vector<int> labels{ 0, 1, 1, 0 };
+    Tensor<float> mat({ 5,5 }, { 1,2,3,4,5,  6,7,8,9,10,  11,12,13,14,15,
+                           16,17,18,19,20,  21,22,23,24,25 });
+    Tensor<float> ker({ 3,3 }, { 1,0,0,  0,0,0,  0,0,0 });
 
-    SGD<float> opt(0.5f);
-    Linear<float> l1(opt, 2, 8, true);
-    Linear<float> l2(opt, 8, 2, false); 
+    auto dmat = CudaTensor<float>::from_host(mat, false);
+    auto dker = CudaTensor<float>::from_host(ker, false);
+    CudaTensor<float> dout(std::vector<long long>{3, 3}, false);
 
-    for (int epoch = 0; epoch <= 2000; ++epoch) {
-        opt.zero_grad();
+    launch_conv2d<float, 3, 3>(dmat.data, dker.data, dout.data, 5, 5);
+    cudaDeviceSynchronize();
 
-        auto x = leaf(X);                    
-        auto h = l1.forward(x);
-        auto logits = l2.forward(h);
-        auto loss = softmax_cross_entropy(logits, labels);
+    dout.to_host().print();
 
-        loss->backward();
-        opt.step();
-
-        if (epoch % 200 == 0) {
-            float l = loss->value.to_host().getData()[0];
-            std::cout << "epoch " << epoch << "\tloss " << l << "\n";
-        }
-    }
-    auto x = leaf(X);
-    auto logits = l2.forward(l1.forward(x));
-    Tensor<float> zt = logits->value.to_host();
-    const std::vector<float>& z = zt.getData();
-    const std::vector<float>& xd = X.getData();
-
-    std::cout << "\npredictions:\n";
-    for (int m = 0; m < 4; ++m) {
-        int pred = z[m * 2 + 0] > z[m * 2 + 1] ? 0 : 1;
-        std::cout << "[" << xd[m * 2] << "," << xd[m * 2 + 1] << "] -> " << pred
-            << "   (label " << labels[m] << ")\n";
-    }
     return 0;
 }

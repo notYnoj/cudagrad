@@ -151,15 +151,30 @@ __global__ void relu_backward_kernel(const U* __restrict__ gout, const U* __rest
 
 
 // c = a x b (a is (M, K) b is (K, N) so c is (M,N))
-template<typename U>
+template<typename U, int T>
 __global__ void matmul_kernel(const U* __restrict__ A, const U* __restrict__ B, U* __restrict__ C, int M, int N, int K) {
-    int row = blockIdx.y * blockDim.y + threadIdx.y;   // m
-    int col = blockIdx.x * blockDim.x + threadIdx.x;   // n threads are made in mxn
-    if (row < M && col < N) {
-        U acc = U(0);
-        for (int k = 0; k < K; ++k) acc += A[row * K + k] * B[k * N + col];
-        C[row * N + col] = acc;
+    __shared__ U A_cache[T*T];
+    __shared__ U B_cache[T*T];
+    //tiling helps becuz cache hits are more importnat than operations
+    int row = blockIdx.y * T + threadIdx.y;
+    int col = blockIdx.x * T + threadIdx.x;
+    int num_sections = (K+T-1)/T;
+
+    U acc = U(0);
+
+    for (int section = 0; section < num_sections; section++) {
+        int tCol_A = section * T + threadIdx.x;
+        int tRow_B = section * T + threadIdx.y;
+        A_cache[(row % T) * T + (col % T)] = (row < M && tCol_A < K ? A[row*K + tCol_A] : 0);
+        B_cache[(row % T) * T + (col % T)] = (tRow_B < K && col < N ? B[tRow_B*N + col] : 0);
+        __syncthreads();
+        
+        for (int i = 0; i < T; i++) {
+            acc += A_cache[(row%T) * T + i] * B_cache[i * T + (col%T)];
+        }
+        __syncthreads();
     }
+    if (row < M && col < N) C[row * N + col] = acc;
 }
 
 // dA[m,k] += sum_n dC[m,n] * B[k,n]     (dA = dC * B^T)
@@ -183,6 +198,7 @@ __global__ void matmul_backward_B_kernel(const U* __restrict__ A, const U* __res
     int n = blockIdx.x * blockDim.x + threadIdx.x;
     if (k < K && n < N) {
         U acc = U(0);
+        //TODO: call from memory is unoptimal
         for (int m = 0; m < M; ++m) acc += A[m * K + k] * dC[m * N + n];
         dB[k * N + n] += acc;
     }
@@ -236,6 +252,49 @@ __global__ void softmax_ce_backward_kernel(const U* __restrict__ gscalar, const 
         U t = (c == labels[m]) ? U(1) : U(0);
         //gscalar[0] = 1 but we can add scaled  (perfect would be probs[idx] = 1 when c==labels[m]
         dZ[idx] += gscalar[0] * (probs[idx] - t) / U(M);
+    }
+}
+
+//convolution mat is (N,M) kernel is (k1, k2)
+template<typename U, int TILES, int K1, int K2>
+__global__ void convolution_kernel(const U* __restrict__ mat, const U* __restrict__ kernel, U* __restrict__ out, int N, int M) {
+    //lets think about what we can cache
+    //for tiles tiels threads we only need to cache k1-1 down and k2 right
+    constexpr int H = (TILES + K1 - 1);
+    constexpr int W = (TILES + K2 - 1);
+    __shared__ U mat_cache[H*W];
+    __shared__ U k_cache[K1 * K2];
+    int row = blockIdx.y * TILES + threadIdx.y;
+    int col = blockIdx.x * TILES + threadIdx.x;
+    int outRow = N - K1 + 1;
+    int outCol = M - K2 + 1;
+    U acc = U(0);
+    //each one can be seen like having an index
+    //the index will be repsonsbile for 
+    int tid = threadIdx.y * TILES + threadIdx.x;
+    for (int responsbile = tid; responsbile < H*W; responsbile += (TILES * TILES)) {
+        //consider everything in hw to have an index too if we add by tiles tiels since everything has a unqiue index that % tiles *tiles is diff adding tiles *tiles gets same mod so all diff numbers
+        int rowInCache = responsbile / W;
+        int colInCache = responsbile % W;
+
+        int rowInMat = (blockIdx.y*TILES+rowInCache);
+        int colInMat = (blockIdx.x*TILES + colInCache);
+
+        mat_cache[rowInCache * W + colInCache] = (rowInMat < N && colInMat < M) ? mat[rowInMat * M + colInMat] : U(0);
+
+    }
+    for (int idx = tid; idx < K1 * K2; idx += TILES * TILES) {
+        k_cache[idx] = kernel[idx];
+    }
+    __syncthreads();
+    for (int i = 0; i < K1; i++) {
+        for (int j = 0; j < K2; j++) {
+            //cur_row+i * W + cur_col + j 
+            acc += k_cache[i * K2 + j] * mat_cache[(threadIdx.y + i) * W + (threadIdx.x + j)];
+        }
+    }
+    if (row < outRow && col < outCol) {
+        out[row * outCol + col] = acc;
     }
 }
 
