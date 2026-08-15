@@ -11,18 +11,6 @@
 #include "cudaLaunch.cuh"
 #include "Node.cuh"
 
-// ---------------------------------------------------------------------------
-// High-level neural-net utilities built on the autograd graph (Node.cuh):
-//   * SGD      - parameter registry + gradient-descent step
-//   * Linear   - a dense layer (y = xW + b, optional relu)
-//   * save/load - serialize parameter data to/from a flat binary file
-//
-// The design mirrors PyTorch: parameters are persistent leaf nodes created
-// ONCE; each forward pass builds a fresh graph on top of them. After
-// loss->backward(), the optimizer reads each parameter's grad and updates its
-// data, then zero_grad() clears grads for the next iteration.
-// ---------------------------------------------------------------------------
-
 template<typename T>
 struct SGD {
     std::vector<NodePtr<T>> params;
@@ -41,8 +29,6 @@ struct SGD {
     }
 };
 
-// A dense / fully-connected layer:  y = relu?(x @ W + b)
-//   x: [M, in]   W: [in, out]   b: [out]   y: [M, out]
 template<typename T>
 struct Linear {
     NodePtr<T> W, b;
@@ -63,7 +49,7 @@ struct Linear {
     }
 };
 
-// ---- serialization: raw parameter data, in registration order ----
+//save and load like other one
 template<typename T>
 void save_params(const std::vector<NodePtr<T>>& params, const std::string& path) {
     std::ofstream f(path, std::ios::binary);

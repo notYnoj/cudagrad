@@ -12,7 +12,6 @@ template<typename T> void launch_add_backward (const T* gout, T* ga, T* gb, std:
 template<typename T> void launch_mul_backward (const T* gout, const T* a, const T* b, T* ga, T* gb, std::size_t n);
 template<typename T> void launch_relu_backward(const T* gout, const T* x, T* gx, std::size_t n);
 
-// ---- neural-net ops ----
 template<typename T> void launch_matmul           (const T* A, const T* B, T* C, int M, int N, int K);
 template<typename T> void launch_matmul_backward_A(const T* dC, const T* B, T* dA, int M, int N, int K);
 template<typename T> void launch_matmul_backward_B(const T* A, const T* dC, T* dB, int M, int N, int K);

@@ -9,8 +9,8 @@ set(CMAKE_CUDA_ARCHITECTURES 89)
 find_package(CUDAToolkit REQUIRED)
 
 add_executable(cudagrad
-    src/main.cpp        # host C++ (MSVC): autograd, tensors, entry point
-    src/launch.cu       # the only CUDA TU: kernels + launch wrappers
+    src/main.cpp       
+    src/launch.cu       
     "include/cudaOps.cuh" "include/cudaTensor.cuh" "include/Node.cuh" "include/cudaLaunch.cuh" "include/AutoGrad.cuh")
 target_include_directories(cudagrad PRIVATE include)
 target_link_libraries(cudagrad PRIVATE CUDA::cudart CUDA::cublas)

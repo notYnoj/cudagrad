@@ -130,7 +130,7 @@ __global__ void add_backward_kernel(const U* __restrict__ gout, U* __restrict__ 
     }
 }
 
-// z = x * y, dL/dx = dL/dz * dz/dx -> y
+// z = x * y, dL/dx = dL/dz * dz/dx = y
 template<typename U>
 __global__ void mul_backward_kernel(const U* __restrict__ gout, const U* __restrict__ x, const U* __restrict__ y, U* __restrict__ gx, U* __restrict__ gy, size_t n) {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -140,7 +140,7 @@ __global__ void mul_backward_kernel(const U* __restrict__ gout, const U* __restr
     }
 }
 
-// dx += (x > 0) ? dz : 0
+// dx += (x > 0) ? dz same reaosning above : 0
 template<typename U>
 __global__ void relu_backward_kernel(const U* __restrict__ gout, const U* __restrict__ x, U* __restrict__ gx, size_t n) {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -150,18 +150,11 @@ __global__ void relu_backward_kernel(const U* __restrict__ gout, const U* __rest
 }
 
 
-
-// ===========================================================================
-// Neural-net kernels: matmul, bias, softmax+cross-entropy, SGD.
-// All row-major. Matmul: A[M,K] * B[K,N] = C[M,N].  (2D grids)
-// ===========================================================================
-
-// C[m,n] = sum_k A[m,k] * B[k,n]
+// c = a x b (a is (M, K) b is (K, N) so c is (M,N))
 template<typename U>
-__global__ void matmul_kernel(const U* __restrict__ A, const U* __restrict__ B,
-                              U* __restrict__ C, int M, int N, int K) {
+__global__ void matmul_kernel(const U* __restrict__ A, const U* __restrict__ B, U* __restrict__ C, int M, int N, int K) {
     int row = blockIdx.y * blockDim.y + threadIdx.y;   // m
-    int col = blockIdx.x * blockDim.x + threadIdx.x;   // n
+    int col = blockIdx.x * blockDim.x + threadIdx.x;   // n threads are made in mxn
     if (row < M && col < N) {
         U acc = U(0);
         for (int k = 0; k < K; ++k) acc += A[row * K + k] * B[k * N + col];
@@ -195,7 +188,7 @@ __global__ void matmul_backward_B_kernel(const U* __restrict__ A, const U* __res
     }
 }
 
-// out[m,n] = in[m,n] + b[n]   (bias broadcast across the M rows)
+//add column wise
 template<typename U>
 __global__ void bias_add_kernel(const U* __restrict__ in, const U* __restrict__ b,
                                 U* __restrict__ out, int M, int N) {
@@ -203,14 +196,14 @@ __global__ void bias_add_kernel(const U* __restrict__ in, const U* __restrict__ 
     if (idx < M * N) out[idx] = in[idx] + b[idx % N];
 }
 
-// dst[i] += src[i]   (used to pass bias-add's grad straight through to its input)
+//pass dL/doutput into dL/dX (dL/dx = dL/dOutput * dOutput/dX (1))
 template<typename U>
 __global__ void accumulate_kernel(U* __restrict__ dst, const U* __restrict__ src, size_t n) {
     size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) dst[i] += src[i];
 }
 
-// db[n] += sum_m gout[m,n]   (bias grad = column sum)
+//bias acts on everything in a col so we just add grad of col
 template<typename U>
 __global__ void bias_grad_kernel(const U* __restrict__ gout, U* __restrict__ db, int M, int N) {
     int n = blockIdx.x * blockDim.x + threadIdx.x;
@@ -221,15 +214,11 @@ __global__ void bias_grad_kernel(const U* __restrict__ gout, U* __restrict__ db,
     }
 }
 
-// Per-row softmax + cross-entropy. One thread per row m.
-//   probs[m,:] = softmax(Z[m,:]) ,  lossp[m] = -log(probs[m, labels[m]])
 template<typename U>
-__global__ void softmax_ce_forward_kernel(const U* __restrict__ Z, const int* __restrict__ labels,
-                                          U* __restrict__ probs, U* __restrict__ lossp,
-                                          int M, int C) {
-    int m = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void softmax_ce_forward_kernel(const U* __restrict__ Z, const int* __restrict__ labels, U* __restrict__ probs, U* __restrict__ lossp, int M, int C) {
+    int m = blockIdx.x * blockDim.x + threadIdx.x; //what example we are currently looking at
     if (m >= M) return;
-    const U* z = Z + m * C;
+    const U* z = Z + m * C; //pointer to where in Z we are, m is our currnet example and C is containers
     U* p = probs + m * C;
     U mx = z[0];
     for (int c = 1; c < C; ++c) mx = z[c] > mx ? z[c] : mx;
@@ -239,15 +228,13 @@ __global__ void softmax_ce_forward_kernel(const U* __restrict__ Z, const int* __
     lossp[m] = -log(p[labels[m]] + U(1e-9));
 }
 
-// dZ[m,c] += gscalar[0] * (probs[m,c] - onehot(labels[m])[c]) / M
 template<typename U>
-__global__ void softmax_ce_backward_kernel(const U* __restrict__ gscalar, const U* __restrict__ probs,
-                                           const int* __restrict__ labels, U* __restrict__ dZ,
-                                           int M, int C) {
+__global__ void softmax_ce_backward_kernel(const U* __restrict__ gscalar, const U* __restrict__ probs, const int* __restrict__ labels, U* __restrict__ dZ, int M, int C) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < M * C) {
         int m = idx / C, c = idx % C;
         U t = (c == labels[m]) ? U(1) : U(0);
+        //gscalar[0] = 1 but we can add scaled  (perfect would be probs[idx] = 1 when c==labels[m]
         dZ[idx] += gscalar[0] * (probs[idx] - t) / U(M);
     }
 }

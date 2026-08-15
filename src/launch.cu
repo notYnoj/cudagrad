@@ -5,17 +5,13 @@
 #include <stdexcept>
 #include <string>
 
-// This is the ONLY translation unit that contains kernel-launch syntax, so it
-// is the only file that must be compiled by nvcc. Everything else (Node.cuh,
-// cudaTensor.cuh, main.cpp) is ordinary host C++.
+
 
 namespace {
     constexpr int BLOCK = 256;
     inline unsigned grid(std::size_t n) {
         return static_cast<unsigned>((n + BLOCK - 1) / BLOCK);
     }
-    // Catches launch-configuration errors immediately (async execution errors
-    // still surface at the next cudaDeviceSynchronize in Tape::backward).
     inline void check(const char* what) {
         cudaError_t e = cudaGetLastError();
         if (e != cudaSuccess)
@@ -24,7 +20,6 @@ namespace {
     }
 }
 
-// ---- forward ----
 template<typename T>
 void launch_add(const T* a, const T* b, T* out, std::size_t n) {
     add_kernel<T><<<grid(n), BLOCK>>>(a, b, out, n);
@@ -41,14 +36,12 @@ void launch_relu(const T* x, T* out, std::size_t n) {
     check("relu");
 }
 
-// ---- utility ----
 template<typename T>
 void launch_fill(T* out, T val, std::size_t n) {
     fill_kernel<T><<<grid(n), BLOCK>>>(out, val, n);
     check("fill");
 }
 
-// ---- backward ----
 template<typename T>
 void launch_add_backward(const T* gout, T* ga, T* gb, std::size_t n) {
     add_backward_kernel<T><<<grid(n), BLOCK>>>(gout, ga, gb, n);
@@ -65,9 +58,8 @@ void launch_relu_backward(const T* gout, const T* x, T* gx, std::size_t n) {
     check("relu_backward");
 }
 
-// ---- neural-net ops ----
 namespace {
-    // 2D launch config for the matmul-family kernels.
+    //2d
     dim3 grid2d(int cols, int rows) {
         return dim3((cols + 15) / 16, (rows + 15) / 16);
     }
@@ -76,17 +68,17 @@ namespace {
 
 template<typename T>
 void launch_matmul(const T* A, const T* B, T* C, int M, int N, int K) {
-    matmul_kernel<T><<<grid2d(N, M), BLOCK2D>>>(A, B, C, M, N, K);   // grid covers (n, m)
+    matmul_kernel<T><<<grid2d(N, M), BLOCK2D>>>(A, B, C, M, N, K);   
     check("matmul");
 }
 template<typename T>
 void launch_matmul_backward_A(const T* dC, const T* B, T* dA, int M, int N, int K) {
-    matmul_backward_A_kernel<T><<<grid2d(K, M), BLOCK2D>>>(dC, B, dA, M, N, K);  // (k, m)
+    matmul_backward_A_kernel<T><<<grid2d(K, M), BLOCK2D>>>(dC, B, dA, M, N, K); 
     check("matmul_backward_A");
 }
 template<typename T>
 void launch_matmul_backward_B(const T* A, const T* dC, T* dB, int M, int N, int K) {
-    matmul_backward_B_kernel<T><<<grid2d(N, K), BLOCK2D>>>(A, dC, dB, M, N, K);  // (n, k)
+    matmul_backward_B_kernel<T><<<grid2d(N, K), BLOCK2D>>>(A, dC, dB, M, N, K); 
     check("matmul_backward_B");
 }
 template<typename T>
@@ -120,10 +112,6 @@ void launch_sgd_update(T* w, const T* g, T lr, std::size_t n) {
     check("sgd_update");
 }
 
-// ---------------------------------------------------------------------------
-// Explicit instantiation: forces concrete symbols to exist so the host .cpp
-// files link. Add a dtype here (e.g. __half) to support it everywhere.
-// ---------------------------------------------------------------------------
 #define INSTANTIATE(T)                                                              \
     template void launch_add<T>(const T*, const T*, T*, std::size_t);               \
     template void launch_mul<T>(const T*, const T*, T*, std::size_t);               \
