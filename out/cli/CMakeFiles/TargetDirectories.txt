@@ -1,0 +1,3 @@
+C:/Users/Ynoj/source/repos/cudagrad/out/cli/CMakeFiles/cudagrad.dir
+C:/Users/Ynoj/source/repos/cudagrad/out/cli/CMakeFiles/ALL_BUILD.dir
+C:/Users/Ynoj/source/repos/cudagrad/out/cli/CMakeFiles/ZERO_CHECK.dir

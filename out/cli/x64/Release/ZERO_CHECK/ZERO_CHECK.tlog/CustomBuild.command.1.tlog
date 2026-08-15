@@ -1,0 +1,10 @@
+^C:\USERS\YNOJ\SOURCE\REPOS\CUDAGRAD\OUT\CLI\CMAKEFILES\1CF9E10F967E2A652643DFBA0D754901\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/Ynoj/source/repos/cudagrad -BC:/Users/Ynoj/source/repos/cudagrad/out/cli --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/Ynoj/source/repos/cudagrad/out/cli/cudagrad.slnx
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

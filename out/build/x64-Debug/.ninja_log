@@ -1,0 +1,9 @@
+# ninja log v7
+20	550	8078300384382993	CMakeFiles/cudagrad.dir/src/main.cpp.obj	16eb038002bd0f99
+25	969	8078299822196406	CMakeFiles/cudagrad.dir/src/kernels.cu.obj	2fc5ae5b5e8c8d2c
+550	692	8078300389690185	cudagrad.exe	d2e584ef5993f974
+21	2041	8084512795044949	build.ninja	75aeb599f85cbf6d
+21	2041	8084512795004769	C:/Users/Ynoj/source/repos/cudagrad/out/build/x64-Debug/cmake_install.cmake	75aeb599f85cbf6d
+9	913	8084526520325619	CMakeFiles/cudagrad.dir/src/main.cpp.obj	16eb038002bd0f99
+14	2231	8084526520365559	CMakeFiles/cudagrad.dir/src/launch.cu.obj	803b64a5c7541c55
+2233	2395	8084526542559791	cudagrad.exe	b6a9c2550dd87a6e
