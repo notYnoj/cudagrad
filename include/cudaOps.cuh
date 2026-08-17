@@ -298,6 +298,75 @@ __global__ void convolution_kernel(const U* __restrict__ mat, const U* __restric
     }
 }
 
+template<typename U>
+__global__ void dFilter_conv_kernel(const U* __restrict__ mat, const U* __restrict__ kernel, U* __restrict__ dW, int W, int oH, int oW, int K1, int K2) {
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    if (row < K1 && col < K2) {
+        U acc = U(0);
+        //for every number in oh and ow we need to add row and col + those 
+        for (int i = 0; i < oH; ++i)
+            for (int j = 0; j < oW; ++j)
+                acc += mat[(i + row) * W + (j + col)] * kernel[i * oW + j];
+        dW[row * K2 + col] += acc;
+    }
+}
+
+//can be optimized with tiling
+template<typename U>
+__global__ void dIn_conv_kernel(const U* __restrict__ mat, const U* __restrict__ kernel, U* __restrict__ dIn, int H, int W, int oH, int oW, int K1, int K2) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row < H && col < W) { 
+        U acc = U(0);
+        for (int ki = 0; ki < K1; ki++) {
+            for (int kj = 0; kj < K2; kj++) {
+                int i = row - ki;
+                int j = col - kj;
+                if (i >= 0 && i < oH && j >= 0 && j < oW) {
+                    acc += mat[i*oW+j] * kernel[ki * K2 + kj];
+                }
+            }
+        }
+        dIn[row * W + col] += acc;
+    }
+}
+
+//takes in mat of [C, H, W] out is going to be size [C, oH, oW] oH
+template<typename U>
+__global__ void maxpool_kernel(const U* __restrict__ mat, U* __restrict__ out, int* __restrict__ argmax_cache, int C, int H, int W, int pool, int oH, int oW) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < C * oH * oW) {
+        int filter = idx / (oH*oW); //What "slice" we are in
+        int row = (idx%(oH*oW)) / (oW);
+        int col = (idx%(oH*oW)) % oW;
+        int start_idx = filter * H * W + (row * pool * W) + (col * pool);
+        U best = mat[start_idx];
+        int best_idx = start_idx;
+        for (int dx = 0; dx < pool; dx++) {
+            for (int dy = 0; dy < pool; dy++) {
+                int cur_idx = start_idx + dx * W + dy;
+                if (mat[cur_idx] > best) {
+                    best = mat[cur_idx]; 
+                    best_idx = cur_idx;
+                }
+            }
+        }
+        out[idx] = best;
+        argmax_cache[idx] = best_idx;
+    }
+}
+
+template<typename U>
+__global__ void maxpool_backward_kernel(const U* __restrict__ dOut, U* __restrict__ dIn, const int* __restrict__ argmax_cache, int C, int oH, int oW) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < C * oH * oW) {
+        int give_grad_idx = argmax_cache[idx]; //idx to give the grad of dOut to
+        U grad = dOut[idx];
+        dIn[give_grad_idx] += grad;
+    }
+}
+
 // w[i] -= lr * g[i]
 template<typename U>
 __global__ void sgd_update_kernel(U* __restrict__ w, const U* __restrict__ g, U lr, size_t n) {

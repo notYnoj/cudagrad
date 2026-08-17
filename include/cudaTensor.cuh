@@ -57,6 +57,8 @@ struct CudaTensor {
 
     size_t bytes() const { return size * sizeof(T); }
 
+    void zero() { if (data) CUDA_CHECK(cudaMemset(data, 0, bytes())); }
+
     void zero_grad() {
         if (grad) CUDA_CHECK(cudaMemset(grad, 0, bytes()));
     }
@@ -68,7 +70,7 @@ struct CudaTensor {
         return t;
     }
 
-    //Converts a cudaTensor into a host tensor
+    //Converts a cudaTensor into a host tensor (gets rid of grad info)
     Tensor<T> to_host() const {
         std::vector<T> buf(size);
         CUDA_CHECK(cudaMemcpy(buf.data(), data, bytes(), cudaMemcpyDeviceToHost));

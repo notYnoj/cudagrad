@@ -187,3 +187,88 @@ NodePtr<T> softmax_cross_entropy(NodePtr<T> logits, const std::vector<int>& labe
     };
     return out;
 }
+
+template<typename T>
+NodePtr<T> conv(NodePtr<T> input, NodePtr<T> filters) {
+    //Input = Tensor of [Cin, H, W]
+    //Filters are Tensor of [Cout, Cin, K1, K2]
+    const int Cin = input->value.shape[0];
+    const int H = input->value.shape[1];
+    const int W = input->value.shape[2];
+    const int Cout = filters->value.shape[0];
+    const int K1 = filters->value.shape[2];
+    const int K2 = filters->value.shape[3];
+    const int oH = H - K1 + 1, oW = W - K2 + 1;
+
+    auto out = std::make_shared<Node<T>>();
+    CudaTensor<T> scratch({Cout, oH, oW}, true);
+    scratch.zero();
+    out->value = std::move(scratch);
+    CudaTensor<T> tmp({oH, oW}, false);
+    out->children = {input, filters};
+
+    for (int co = 0; co < Cout; co++) {
+        T* outCh = out->value.data + co * oH * oW;
+        for (int kernel = 0; kernel < Cin; kernel++) {
+            const T* inCh = input->value.data + (kernel * H * W);
+            const T* filt = filters->value.data + (co * Cin * K1 * K2 + (kernel * K1 * K2));
+            if (K1 == 3 && K2 == 3) launch_conv2d<T, 3, 3>(inCh, filt, tmp.data, H, W);
+            else if (K1 == 5 && K2 == 5) launch_conv2d<T, 5, 5>(inCh, filt, tmp.data, H, W);
+            launch_accumulate<T>(outCh, tmp.data, oH*oW);
+        }
+    }
+    //forward ^
+
+    //backward:
+    Node<T>* o = out.get(),* in = input.get(),* fi = filters.get();
+    //dKernel = conv(cur_in, dOut)
+    //dcur_in = 
+    out->backward_fn = [o, in, fi, Cin, H, W, Cout, K1, K2, oH, oW]() {
+        for (int co = 0; co < Cout; co++) {
+            for (int kernel = 0; kernel < Cin; kernel++) {
+                const T* dOut = o->value.grad + (co * (oH*oW));
+                const T* cur_in = in->value.data + (kernel * (H*W));
+                T* cur_filter_grad = fi->value.grad + (co * Cin * K1 * K2 + (kernel * K1 * K2));
+                launch_conv_dW<T>(cur_in, dOut, cur_filter_grad, W, oH, oW, K1, K2);
+            }
+        }
+        for (int ci = 0; ci < Cin; ++ci) {
+            //what layer am i looking at rn
+            T* dIn = in->value.grad + ci * H * W;
+            for (int co = 0; co < Cout; ++co) { //each layer with its corresponding filter produces some impact on cO find this
+                //these layers each contrinbute to co somewhere
+                const T* dOut = o->value.grad + co * oH * oW;
+                const T* filt = fi->value.data + (co*Cin*K1*K2) + ci*K1*K2;
+                launch_conv_dIn<T>(dOut, filt, dIn, H, W, oH, oW, K1, K2); 
+            }
+        }
+
+    };
+    return out;
+}
+
+template <typename T> 
+NodePtr<T> maxpool(NodePtr<T> input, int pool) {
+    NodePtr<T> out = std::make_shared<Node<T>>();
+    const int C = static_cast<int>(input->value.shape[0]);
+    const int H = static_cast<int>(input->value.shape[1]);
+    const int W = static_cast<int>(input->value.shape[2]);
+    const int oH = H / pool, oW = W / pool;
+
+    out->value = CudaTensor<T>({C, oH, oW}, true);
+    out->op = "maxpool";
+    out->children = { input };
+
+    //kept alive for backwards
+    int* argmax_raw = nullptr;
+    CUDA_CHECK(cudaMalloc(&argmax_raw, sizeof(int) * C * oH * oW));
+    std::shared_ptr<int> argmax_cache(argmax_raw, [](int* p) { cudaFree(p); });
+
+    launch_maxpool<T>(input->value.data, out->value.data, argmax_cache.get(), C, H, W, pool, oH, oW);
+
+    Node<T>* o = out.get(), *in = input.get();
+    out->backward_fn = [o, in, C, argmax_cache, oH, oW]() {
+        launch_backward_maxpool(o->value.grad, in->value.grad, argmax_cache.get(), C, oH, oW);
+    };
+    return out;
+}

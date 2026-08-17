@@ -23,3 +23,10 @@ template<typename T> void launch_softmax_ce_backward(const T* gscalar, const T* 
 template<typename T> void launch_sgd_update       (T* w, const T* g, T lr, std::size_t n);
 
 template<typename T, int K1, int K2> void launch_conv2d(const T* mat, const T* kernel, T* out, int N, int M);
+
+template<typename T> void launch_conv_dW(const T* in, const T* dOut, T* dW, int W, int oH, int oW, int K1, int K2);
+
+template<typename T> void launch_conv_dIn(const T* mat, const T* kernel, T* dIn, int H, int W, int oH, int oW, int K1, int K2);
+
+template<typename T> void launch_maxpool(const T* mat, T* out, int* argmax_cache, int C, int H, int W, int pool, int oH, int oW);
+template<typename T> void launch_backward_maxpool(const T* dOut, T* dIn, const int* argmax_cache, int C, int oH, int oW);

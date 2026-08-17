@@ -1,5 +1,7 @@
 #include <iostream>
 #include <vector>
+#include <cmath>
+#include <algorithm>
 
 #include "tensor.hpp"
 #include "cudaTensor.cuh"
@@ -8,18 +10,40 @@
 #include "cudaLaunch.cuh"
 
 int main() {
-    Tensor<float> mat({ 5,5 }, { 1,2,3,4,5,  6,7,8,9,10,  11,12,13,14,15,
-                           16,17,18,19,20,  21,22,23,24,25 });
-    Tensor<float> ker({ 3,3 }, { 1,0,0,  0,0,0,  0,0,0 });
+    Tensor<float> inT({ 1,4,4 }, { 1,  5,  2,  6,
+                                  8,  3,  4,  7,
+                                  9, 13, 10, 14,
+                                 16, 12, 11, 15 });
 
-    auto dmat = CudaTensor<float>::from_host(mat, false);
-    auto dker = CudaTensor<float>::from_host(ker, false);
-    CudaTensor<float> dout(std::vector<long long>{3, 3}, false);
+    auto x = leaf(inT);
+    auto y = maxpool(x, 2);
+    y->backward();                     
 
-    launch_conv2d<float, 3, 3>(dmat.data, dker.data, dout.data, 5, 5);
-    cudaDeviceSynchronize();
+    std::cout << "forward (expect 8 7 / 16 15):\n";
+    y->value.to_host().print();
 
-    dout.to_host().print();
+    Tensor<float> dIn_analytic = x->value.grad_to_host();
+    std::cout << "\ndIn analytic (expect 1s at the max positions):\n";
+    dIn_analytic.print();
 
+    auto lossOf = [](Tensor<float> inH) {
+        auto xx = leaf(inH);
+        auto yy = maxpool(xx, 2);
+        Tensor<float> yh = yy->value.to_host();  
+        float s = 0.0f;
+        for (float v : yh.getData()) s += v;
+        return s;
+        };
+
+    const float eps = 1e-2f;
+    float maxErr = 0.0f;
+    for (int i = 0; i < (int)inT.getData().size(); ++i) {
+        Tensor<float> ip = inT, im = inT;
+        ip.getData()[i] += eps;
+        im.getData()[i] -= eps;
+        float numeric = (lossOf(ip) - lossOf(im)) / (2.0f * eps);
+        maxErr = std::max(maxErr, std::abs(numeric - dIn_analytic.getData()[i]));
+    }
+    std::cout << "\nmax dIn gradient error = " << maxErr << "\n";
     return 0;
 }

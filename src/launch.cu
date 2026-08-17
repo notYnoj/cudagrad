@@ -126,6 +126,33 @@ void launch_conv2d(const T* mat, const T* kernel, T* out, int N, int M) {
     convolution_kernel<T, TILES, K1, K2><<<grid, block>>>(mat, kernel, out, N, M);
     check("conv2d");
 }
+template<typename T>
+void launch_conv_dW(const T* mat, const T* kernel, T* dW, int W, int oH, int oW, int K1, int K2) {
+    dim3 block(16, 16);
+    dim3 grid((K2 + 15) / 16, (K1 + 15) / 16);
+    dFilter_conv_kernel<T> << <grid, block >> > (mat, kernel, dW, W, oH, oW, K1, K2);
+    check("conv_dW");
+}
+
+template<typename T>
+void launch_conv_dIn(const T* mat, const T* kernel, T* dIn, int H, int W, int oH, int oW, int K1, int K2) {
+    dim3 block(16, 16);
+    dim3 grid((W + 15) / 16, (H + 15) / 16);
+    dIn_conv_kernel<T> << <grid, block >> > (mat, kernel, dIn, H, W, oH, oW, K1, K2);
+    check("conv_dIn");
+}
+
+template <typename T>
+void launch_maxpool(const T* mat, T* out, int* argmax_cache, int C, int H, int W, int pool, int oH, int oW) {
+    maxpool_kernel << <grid(C* oH * oW), BLOCK >> > (mat, out, argmax_cache, C, H, W, pool, oH, oW);
+    check("maxpool");
+}
+
+template <typename T>
+void launch_backward_maxpool(const T* dOut, T* dIn, const int* argmax_cache, int C, int oH, int oW) {
+    maxpool_backward_kernel << <grid(C* oH * oW), BLOCK >> > (dOut, dIn, argmax_cache, C, oH, oW);
+    check("maxpool_backward");
+}
 
 #define INSTANTIATE(T)                                                              \
     template void launch_add<T>(const T*, const T*, T*, std::size_t);               \
@@ -144,6 +171,10 @@ void launch_conv2d(const T* mat, const T* kernel, T* out, int N, int M) {
     template void launch_softmax_ce_forward<T>(const T*, const int*, T*, T*, int, int); \
     template void launch_softmax_ce_backward<T>(const T*, const T*, const int*, T*, int, int); \
     template void launch_sgd_update<T>(T*, const T*, T, std::size_t); \
+    template void launch_conv_dW<T>(const T*, const T*, T*, int, int ,int ,int, int); \
+    template void launch_conv_dIn<T>(const T*, const T*, T*, int, int, int, int, int, int); \
+    template void launch_maxpool<T>(const T*, T*, int*, int, int, int, int, int, int); \
+    template void launch_backward_maxpool<T>(const T*, T*, const int*, int, int, int); \
 
 INSTANTIATE(float)
 INSTANTIATE(double)
