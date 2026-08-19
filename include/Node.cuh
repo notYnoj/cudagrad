@@ -272,3 +272,21 @@ NodePtr<T> maxpool(NodePtr<T> input, int pool) {
     };
     return out;
 }
+
+template<typename T>
+NodePtr<T> flatten(NodePtr<T> input) {
+    const std::size_t N = input->value.size;   // C*H*W
+    auto out = std::make_shared<Node<T>>();
+    out->value = CudaTensor<T>(std::vector<long long>{ 1, (long long)N }, true);
+    out->op = "flatten";
+    out->children = { input };
+
+    CUDA_CHECK(cudaMemcpy(out->value.data, input->value.data,
+        N * sizeof(T), cudaMemcpyDeviceToDevice));
+
+    Node<T>* o = out.get(); Node<T>* px = input.get();
+    out->backward_fn = [o, px, N]() {
+        launch_accumulate<T>(px->value.grad, o->value.grad, N);   // reshape grad straight back
+        };
+    return out;
+}

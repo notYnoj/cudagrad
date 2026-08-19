@@ -49,6 +49,33 @@ struct Linear {
     }
 };
 
+template <typename T>
+struct Conv {
+    NodePtr<T> filters; //need [Cout, Cin, kernelSize, kernelSize]
+    Conv(SGD<T>& opt, long long Cin, long long Cout, long long kernelSize) {
+        Tensor<T> filter(std::vector<long long> {Cout, Cin, kernelSize, kernelSize}, Init::He, Cin*kernelSize*kernelSize);
+        filters = leaf(filter);
+        opt.add(filters);
+    }
+    NodePtr<T> forward(NodePtr<T> input) {
+        NodePtr<T> y = relu(conv(input, filters));
+        return y;
+    }
+};
+
+//dont need to take in an optimizer because there are no parameters we are optimizing
+template<typename T>
+struct MaxPool {
+    int pool;
+    MaxPool(int pool = 2) : pool(pool) {}
+    NodePtr<T> forward(NodePtr<T> input) { return maxpool(input, pool); }
+};
+
+template<typename T>
+struct Flatten {
+    NodePtr<T> forward(NodePtr<T> x) { return flatten(x); }
+};
+
 //save and load like other one
 template<typename T>
 void save_params(const std::vector<NodePtr<T>>& params, const std::string& path) {
