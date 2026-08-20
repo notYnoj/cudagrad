@@ -30,3 +30,6 @@ template<typename T> void launch_conv_dIn(const T* mat, const T* kernel, T* dIn,
 
 template<typename T> void launch_maxpool(const T* mat, T* out, int* argmax_cache, int C, int H, int W, int pool, int oH, int oW);
 template<typename T> void launch_backward_maxpool(const T* dOut, T* dIn, const int* argmax_cache, int C, int oH, int oW);
+
+template<typename T> void launch_conv_bias(const T* in, const T* bias, T* out, int C, int HW);
+template<typename T> void launch_conv_bias_grad(const T* dOut, T* dBias, int C, int HW);

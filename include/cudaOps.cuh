@@ -332,6 +332,31 @@ __global__ void dIn_conv_kernel(const U* __restrict__ mat, const U* __restrict__
     }
 }
 
+//for (C, HW) we add bias[c] to each i,j in H W
+template<typename U>
+__global__ void conv_bias_forward_kernel(const U* __restrict__ in, const U* __restrict__ bias,
+    U* __restrict__ out, int C, int HW) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < C * HW) { //there are C*H*W but H*W is total pass in HW to avoid mul
+        int c = idx / HW;
+        out[idx] = in[idx] + bias[c];
+    }
+}
+
+
+template<typename U>
+__global__ void conv_bias_grad_kernel(const U* __restrict__ dOut, U* __restrict__ dBias,
+    int C, int HW) {
+    int c = blockIdx.x * blockDim.x + threadIdx.x;
+    if (c < C) {
+        U acc = U(0);
+        for (int i = 0; i < HW; ++i) acc += dOut[c * HW + i];
+        dBias[c] += acc;
+    }
+}
+
+
+
 //takes in mat of [C, H, W] out is going to be size [C, oH, oW] oH
 template<typename U>
 __global__ void maxpool_kernel(const U* __restrict__ mat, U* __restrict__ out, int* __restrict__ argmax_cache, int C, int H, int W, int pool, int oH, int oW) {
@@ -373,4 +398,3 @@ __global__ void sgd_update_kernel(U* __restrict__ w, const U* __restrict__ g, U 
     size_t i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) w[i] -= lr * g[i];
 }
-

@@ -154,6 +154,17 @@ void launch_backward_maxpool(const T* dOut, T* dIn, const int* argmax_cache, int
     check("maxpool_backward");
 }
 
+template <typename T>
+void launch_conv_bias(const T* in, const T* bias, T* out, int C, int HW) {
+    conv_bias_forward_kernel<T><<<grid((std::size_t)C * HW), BLOCK>>>(in, bias, out, C, HW);
+    check("conv_bias");
+}
+template <typename T>
+void launch_conv_bias_grad(const T* dOut, T* dBias, int C, int HW) {
+    conv_bias_grad_kernel<T><<<grid((std::size_t)C), BLOCK>>>(dOut, dBias, C, HW);
+    check("conv_bias_grad");
+}
+
 #define INSTANTIATE(T)                                                              \
     template void launch_add<T>(const T*, const T*, T*, std::size_t);               \
     template void launch_mul<T>(const T*, const T*, T*, std::size_t);               \
@@ -175,6 +186,8 @@ void launch_backward_maxpool(const T* dOut, T* dIn, const int* argmax_cache, int
     template void launch_conv_dIn<T>(const T*, const T*, T*, int, int, int, int, int, int); \
     template void launch_maxpool<T>(const T*, T*, int*, int, int, int, int, int, int); \
     template void launch_backward_maxpool<T>(const T*, T*, const int*, int, int, int); \
+    template void launch_conv_bias<T>(const T*, const T*, T*, int, int);               \
+    template void launch_conv_bias_grad<T>(const T*, T*, int, int); \
 
 INSTANTIATE(float)
 INSTANTIATE(double)

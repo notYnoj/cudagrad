@@ -190,8 +190,8 @@ NodePtr<T> softmax_cross_entropy(NodePtr<T> logits, const std::vector<int>& labe
 
 template<typename T>
 NodePtr<T> conv(NodePtr<T> input, NodePtr<T> filters) {
-    //Input = Tensor of [Cin, H, W]
-    //Filters are Tensor of [Cout, Cin, K1, K2]
+    //input = Tensor of [Cin, H, W]
+    //filters are tensor of [Cout, Cin, K1, K2]
     const int Cin = input->value.shape[0];
     const int H = input->value.shape[1];
     const int W = input->value.shape[2];
@@ -247,7 +247,27 @@ NodePtr<T> conv(NodePtr<T> input, NodePtr<T> filters) {
     return out;
 }
 
-template <typename T> 
+template<typename T>
+NodePtr<T> conv_bias(NodePtr<T> x, NodePtr<T> bias) {
+    const int C  = static_cast<int>(x->value.shape[0]);
+    const int HW = static_cast<int>(x->value.shape[1] * x->value.shape[2]);
+
+    auto out = std::make_shared<Node<T>>();
+    out->value = CudaTensor<T>(x->value.shape, true);
+    out->op = "conv_bias";
+    out->children = { x, bias };
+
+    launch_conv_bias<T>(x->value.data, bias->value.data, out->value.data, C, HW);
+
+    Node<T>* o = out.get(); Node<T>* px = x.get(); Node<T>* pb = bias.get();
+    out->backward_fn = [o, px, pb, C, HW]() {
+        launch_accumulate<T>(px->value.grad, o->value.grad, static_cast<std::size_t>(C) * HW); // pass it back since bias is a constant
+        launch_conv_bias_grad<T>(o->value.grad, pb->value.grad, C, HW);                         // dLoss/dOut * dOut/dGrad <- 1  so its just going to grad of what it touches
+    };
+    return out;
+}
+
+template <typename T>
 NodePtr<T> maxpool(NodePtr<T> input, int pool) {
     NodePtr<T> out = std::make_shared<Node<T>>();
     const int C = static_cast<int>(input->value.shape[0]);
