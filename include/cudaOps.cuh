@@ -1,3 +1,7 @@
+/* DOCS:
+This is where 
+*/
+
 #pragma once
 
 #include <cuda_runtime.h>
@@ -99,7 +103,7 @@ __global__ void neg_kernel(const U* __restrict__ x, U* __restrict__ out, size_t 
 
 
 template<typename U>
-__global__ void relu_kernel(const U* __restrict__ x, U* __restrict__ out, size_t n){
+__global__ void relu_kernel(const U* __restrict__ x, U* __restrict__ out, size_t n) {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n)
         out[idx] = x[idx] > 0 ? x[idx] : 0;
@@ -150,37 +154,37 @@ __global__ void relu_backward_kernel(const U* __restrict__ gout, const U* __rest
 }
 
 
-// c = a x b (a is (M, K) b is (K, N) so c is (M,N))
+//c = a x b (a is (M, K) b is (K, N) so c is (M,N))
 template<typename U, int T>
 __global__ void matmul_kernel(const U* __restrict__ A, const U* __restrict__ B, U* __restrict__ C, int M, int N, int K) {
-    __shared__ U A_cache[T*T];
-    __shared__ U B_cache[T*T];
+    __shared__ U A_cache[T * T];
+    __shared__ U B_cache[T * T];
     //tiling helps becuz cache hits are more importnat than operations
     int row = blockIdx.y * T + threadIdx.y;
     int col = blockIdx.x * T + threadIdx.x;
-    int num_sections = (K+T-1)/T;
+    int num_sections = (K + T - 1) / T;
 
     U acc = U(0);
 
     for (int section = 0; section < num_sections; section++) {
         int tCol_A = section * T + threadIdx.x;
         int tRow_B = section * T + threadIdx.y;
-        A_cache[(row % T) * T + (col % T)] = (row < M && tCol_A < K ? A[row*K + tCol_A] : 0);
-        B_cache[(row % T) * T + (col % T)] = (tRow_B < K && col < N ? B[tRow_B*N + col] : 0);
+        A_cache[(row % T) * T + (col % T)] = (row < M && tCol_A < K ? A[row * K + tCol_A] : 0);
+        B_cache[(row % T) * T + (col % T)] = (tRow_B < K && col < N ? B[tRow_B * N + col] : 0);
         __syncthreads();
-        
+
         for (int i = 0; i < T; i++) {
-            acc += A_cache[(row%T) * T + i] * B_cache[i * T + (col%T)];
+            acc += A_cache[(row % T) * T + i] * B_cache[i * T + (col % T)];
         }
         __syncthreads();
     }
     if (row < M && col < N) C[row * N + col] = acc;
 }
 
-// dA[m,k] += sum_n dC[m,n] * B[k,n]     (dA = dC * B^T)
+// dA[m,k] += sum_n dC[m,n] * B[k,n]
 template<typename U>
 __global__ void matmul_backward_A_kernel(const U* __restrict__ dC, const U* __restrict__ B,
-                                         U* __restrict__ dA, int M, int N, int K) {
+    U* __restrict__ dA, int M, int N, int K) {
     int m = blockIdx.y * blockDim.y + threadIdx.y;
     int k = blockIdx.x * blockDim.x + threadIdx.x;
     if (m < M && k < K) {
@@ -190,10 +194,10 @@ __global__ void matmul_backward_A_kernel(const U* __restrict__ dC, const U* __re
     }
 }
 
-// dB[k,n] += sum_m A[m,k] * dC[m,n]     (dB = A^T * dC)
+// dB[k,n] += sum_m A[m,k] * dC[m,n]
 template<typename U>
 __global__ void matmul_backward_B_kernel(const U* __restrict__ A, const U* __restrict__ dC,
-                                         U* __restrict__ dB, int M, int N, int K) {
+    U* __restrict__ dB, int M, int N, int K) {
     int k = blockIdx.y * blockDim.y + threadIdx.y;
     int n = blockIdx.x * blockDim.x + threadIdx.x;
     if (k < K && n < N) {
@@ -207,7 +211,7 @@ __global__ void matmul_backward_B_kernel(const U* __restrict__ A, const U* __res
 //add column wise
 template<typename U>
 __global__ void bias_add_kernel(const U* __restrict__ in, const U* __restrict__ b,
-                                U* __restrict__ out, int M, int N) {
+    U* __restrict__ out, int M, int N) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < M * N) out[idx] = in[idx] + b[idx % N];
 }
@@ -255,125 +259,131 @@ __global__ void softmax_ce_backward_kernel(const U* __restrict__ gscalar, const 
     }
 }
 
-//convolution mat is (N,M) kernel is (k1, k2)
-template<typename U, int TILES, int K1, int K2>
-__global__ void convolution_kernel(const U* __restrict__ mat, const U* __restrict__ kernel, U* __restrict__ out, int N, int M) {
-    //lets think about what we can cache
-    //for tiles tiels threads we only need to cache k1-1 down and k2 right
-    constexpr int H = (TILES + K1 - 1);
-    constexpr int W = (TILES + K2 - 1);
-    __shared__ U mat_cache[H*W];
-    __shared__ U k_cache[K1 * K2];
-    int row = blockIdx.y * TILES + threadIdx.y;
-    int col = blockIdx.x * TILES + threadIdx.x;
-    int outRow = N - K1 + 1;
-    int outCol = M - K2 + 1;
+// out[n,co,oh,ow] = sum ci,ki,kj in[n,ci,oh+ki,ow+kj] * filt[co,ci,ki,kj]
+template<typename U>
+__global__ void conv2d_forward_kernel(const U* __restrict__ in, const U* __restrict__ filt,
+    U* __restrict__ out,
+    int N, int Cin, int H, int W,
+    int Cout, int K1, int K2, int oH, int oW) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= N * Cout * oH * oW) return;
+    int ow = idx % oW;
+    int oh = (idx / oW) % oH;
+    int co = (idx / (oW * oH)) % Cout;
+    int n = idx / (oW * oH * Cout);
+
     U acc = U(0);
-    //each one can be seen like having an index
-    //the index will be repsonsbile for 
-    int tid = threadIdx.y * TILES + threadIdx.x;
-    for (int responsbile = tid; responsbile < H*W; responsbile += (TILES * TILES)) {
-        //consider everything in hw to have an index too if we add by tiles tiels since everything has a unqiue index that % tiles *tiles is diff adding tiles *tiles gets same mod so all diff numbers
-        int rowInCache = responsbile / W;
-        int colInCache = responsbile % W;
-
-        int rowInMat = (blockIdx.y*TILES+rowInCache);
-        int colInMat = (blockIdx.x*TILES + colInCache);
-
-        mat_cache[rowInCache * W + colInCache] = (rowInMat < N && colInMat < M) ? mat[rowInMat * M + colInMat] : U(0);
-
+    for (int ci = 0; ci < Cin; ++ci) {
+        const U* img = in + ((size_t)n * Cin + ci) * H * W;
+        const U* f = filt + ((size_t)co * Cin + ci) * K1 * K2;
+        for (int ki = 0; ki < K1; ++ki)
+            for (int kj = 0; kj < K2; ++kj)
+                acc += img[(oh + ki) * W + (ow + kj)] * f[ki * K2 + kj];
     }
-    for (int idx = tid; idx < K1 * K2; idx += TILES * TILES) {
-        k_cache[idx] = kernel[idx];
-    }
-    __syncthreads();
-    for (int i = 0; i < K1; i++) {
-        for (int j = 0; j < K2; j++) {
-            //cur_row+i * W + cur_col + j 
-            acc += k_cache[i * K2 + j] * mat_cache[(threadIdx.y + i) * W + (threadIdx.x + j)];
-        }
-    }
-    if (row < outRow && col < outCol) {
-        out[row * outCol + col] = acc;
-    }
+    out[idx] = acc;
 }
 
+// dW[co,ci,ki,kj] += sum n,oh,ow in[n,ci,oh+ki,ow+kj] * dOut[n,co,oh,ow]
 template<typename U>
-__global__ void dFilter_conv_kernel(const U* __restrict__ mat, const U* __restrict__ kernel, U* __restrict__ dW, int W, int oH, int oW, int K1, int K2) {
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    if (row < K1 && col < K2) {
-        U acc = U(0);
-        //for every number in oh and ow we need to add row and col + those 
-        for (int i = 0; i < oH; ++i)
-            for (int j = 0; j < oW; ++j)
-                acc += mat[(i + row) * W + (j + col)] * kernel[i * oW + j];
-        dW[row * K2 + col] += acc;
+__global__ void conv2d_dW_kernel(const U* __restrict__ in, const U* __restrict__ dOut,
+    U* __restrict__ dW,
+    int N, int Cin, int H, int W,
+    int Cout, int K1, int K2, int oH, int oW) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= Cout * Cin * K1 * K2) return;
+    int kj = idx % K2;
+    int ki = (idx / K2) % K1;
+    int ci = (idx / (K2 * K1)) % Cin;
+    int co = idx / (K2 * K1 * Cin);
+
+    U acc = U(0);
+    for (int n = 0; n < N; ++n) {
+        const U* img = in + ((size_t)n * Cin + ci) * H * W;
+        const U* dImg = dOut + ((size_t)n * Cout + co) * oH * oW;
+        for (int oh = 0; oh < oH; ++oh)
+            for (int ow = 0; ow < oW; ++ow)
+                acc += img[(oh + ki) * W + (ow + kj)] * dImg[oh * oW + ow];
     }
+    dW[idx] += acc;
 }
 
-//can be optimized with tiling
+// dIn[n,ci,h,w] += sum_{co,ki,kj valid} dOut[n,co,h-ki,w-kj] * filt[co,ci,ki,kj]
 template<typename U>
-__global__ void dIn_conv_kernel(const U* __restrict__ mat, const U* __restrict__ kernel, U* __restrict__ dIn, int H, int W, int oH, int oW, int K1, int K2) {
-    int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int col = blockIdx.x * blockDim.x + threadIdx.x;
-    if (row < H && col < W) { 
-        U acc = U(0);
-        for (int ki = 0; ki < K1; ki++) {
-            for (int kj = 0; kj < K2; kj++) {
-                int i = row - ki;
-                int j = col - kj;
-                if (i >= 0 && i < oH && j >= 0 && j < oW) {
-                    acc += mat[i*oW+j] * kernel[ki * K2 + kj];
-                }
+__global__ void conv2d_dIn_kernel(const U* __restrict__ dOut, const U* __restrict__ filt,
+    U* __restrict__ dIn,
+    int N, int Cin, int H, int W,
+    int Cout, int K1, int K2, int oH, int oW) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= N * Cin * H * W) return;
+    int w = idx % W;
+    int h = (idx / W) % H;
+    int ci = (idx / (W * H)) % Cin;
+    int n = idx / (W * H * Cin);
+
+    U acc = U(0);
+    for (int co = 0; co < Cout; ++co) {
+        const U* dImg = dOut + ((size_t)n * Cout + co) * oH * oW;
+        const U* f = filt + ((size_t)co * Cin + ci) * K1 * K2;
+        for (int ki = 0; ki < K1; ++ki) {
+            int oh = h - ki; if (oh < 0 || oh >= oH) continue;
+            for (int kj = 0; kj < K2; ++kj) {
+                int ow = w - kj; if (ow < 0 || ow >= oW) continue;
+                acc += dImg[oh * oW + ow] * f[ki * K2 + kj];
             }
         }
-        dIn[row * W + col] += acc;
     }
+    dIn[idx] += acc;
 }
 
-//for (C, HW) we add bias[c] to each i,j in H W
+// each chanel has a bias
 template<typename U>
 __global__ void conv_bias_forward_kernel(const U* __restrict__ in, const U* __restrict__ bias,
-    U* __restrict__ out, int C, int HW) {
+    U* __restrict__ out, int N, int C, int HW) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < C * HW) { //there are C*H*W but H*W is total pass in HW to avoid mul
-        int c = idx / HW;
+    if (idx < N * C * HW) {
+        int c = (idx / HW) % C;
         out[idx] = in[idx] + bias[c];
     }
 }
 
 
+// dBias[c] += sum over all examples and HW (of dOut)
 template<typename U>
 __global__ void conv_bias_grad_kernel(const U* __restrict__ dOut, U* __restrict__ dBias,
-    int C, int HW) {
+    int N, int C, int HW) {
     int c = blockIdx.x * blockDim.x + threadIdx.x;
     if (c < C) {
         U acc = U(0);
-        for (int i = 0; i < HW; ++i) acc += dOut[c * HW + i];
+        for (int n = 0; n < N; ++n) {
+            //n*C*HW first stack + then c * HW for prev stacks we start here and then we just add up (0-8) start 9 
+            const U* d = dOut + ((size_t)n * C + c) * HW;
+            for (int i = 0; i < HW; ++i) acc += d[i];
+        }
         dBias[c] += acc;
     }
 }
 
 
 
-//takes in mat of [C, H, W] out is going to be size [C, oH, oW] oH
+// mat[N,C,H,W] becomesout [N,C,oH,oW]
 template<typename U>
-__global__ void maxpool_kernel(const U* __restrict__ mat, U* __restrict__ out, int* __restrict__ argmax_cache, int C, int H, int W, int pool, int oH, int oW) {
+__global__ void maxpool_kernel(const U* __restrict__ mat, U* __restrict__ out, int* __restrict__ argmax_cache, int N, int C, int H, int W, int pool, int oH, int oW) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < C * oH * oW) {
-        int filter = idx / (oH*oW); //What "slice" we are in
-        int row = (idx%(oH*oW)) / (oW);
-        int col = (idx%(oH*oW)) % oW;
-        int start_idx = filter * H * W + (row * pool * W) + (col * pool);
-        U best = mat[start_idx];
-        int best_idx = start_idx;
+    if (idx < N * C * oH * oW) {
+        int ow = idx % oW;
+        int oh = (idx / oW) % oH;
+        int c = (idx / (oW * oH)) % C;
+        int n = idx / (oW * oH * C);
+        size_t sliceBase = ((size_t)n * C + c) * H * W;
+        int base = (oh * pool) * W + (ow * pool);
+        U best = mat[sliceBase + base];
+        int best_idx = (int)(sliceBase + base);
         for (int dx = 0; dx < pool; dx++) {
             for (int dy = 0; dy < pool; dy++) {
-                int cur_idx = start_idx + dx * W + dy;
-                if (mat[cur_idx] > best) {
-                    best = mat[cur_idx]; 
-                    best_idx = cur_idx;
+                int cur = base + dx * W + dy;
+                if (mat[sliceBase + cur] > best) {
+                    best = mat[sliceBase + cur];
+                    best_idx = (int)(sliceBase + cur);
                 }
             }
         }
@@ -383,12 +393,36 @@ __global__ void maxpool_kernel(const U* __restrict__ mat, U* __restrict__ out, i
 }
 
 template<typename U>
-__global__ void maxpool_backward_kernel(const U* __restrict__ dOut, U* __restrict__ dIn, const int* __restrict__ argmax_cache, int C, int oH, int oW) {
+__global__ void maxpool_backward_kernel(const U* __restrict__ dOut, U* __restrict__ dIn, const int* __restrict__ argmax_cache, int N, int C, int oH, int oW) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < C * oH * oW) {
-        int give_grad_idx = argmax_cache[idx]; //idx to give the grad of dOut to
-        U grad = dOut[idx];
-        dIn[give_grad_idx] += grad;
+    if (idx < N * C * oH * oW) {
+        dIn[argmax_cache[idx]] += dOut[idx];
+    }
+}
+
+template<typename U>
+__global__ void mean_reduce_kernel(const U* __restrict__ in, U* __restrict__ out, int M) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        U s = U(0);
+        for (int i = 0; i < M; ++i) s += in[i];
+        out[0] = s / U(M);
+    }
+}
+
+template<typename U>
+__global__ void accumulate_loss_correct(U* in, const U* loss, const U* logits, int* labels, int M, int C) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    if (idx < M) {
+        atomicAdd(&in[0], loss[0]);
+        U mx = logits[idx * C + 0];
+        int pred = 0;
+        for (int i = 1; i < C; i++) {
+            if (mx < logits[idx * C + i]) {
+                mx = logits[idx * C + i];
+                pred = i;
+            }
+        }
+        if (pred == labels[idx]) atomicAdd(&in[1], (U)1);
     }
 }
 

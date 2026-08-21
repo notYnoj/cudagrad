@@ -10,8 +10,8 @@
 
 template<typename T>
 struct Node {
-    CudaTensor<T> value; 
-    std::vector<std::shared_ptr<Node<T>>> children; 
+    CudaTensor<T> value;
+    std::vector<std::shared_ptr<Node<T>>> children;
     std::function<void()> backward_fn;
     const char* op = "leaf";
 
@@ -25,7 +25,6 @@ struct Node {
         for (auto it = topo.rbegin(); it != topo.rend(); ++it)
             if ((*it)->backward_fn) (*it)->backward_fn();
 
-        CUDA_CHECK(cudaDeviceSynchronize());
     }
     void zero_grad() {
         std::vector<Node<T>*> topo;
@@ -36,11 +35,11 @@ struct Node {
 
 private:
     static void build_topo(Node<T>* n, std::vector<Node<T>*>& topo,
-                           std::unordered_set<Node<T>*>& seen) {
+        std::unordered_set<Node<T>*>& seen) {
         if (seen.count(n)) return;
         seen.insert(n);
         for (auto& c : n->children) build_topo(c.get(), topo, seen);
-        topo.push_back(n); 
+        topo.push_back(n);
     }
 };
 
@@ -68,7 +67,7 @@ NodePtr<T> add(NodePtr<T> a, NodePtr<T> b) {
     Node<T>* o = out.get(); Node<T>* pa = a.get(); Node<T>* pb = b.get();
     out->backward_fn = [o, pa, pb, n]() {
         launch_add_backward<T>(o->value.grad, pa->value.grad, pb->value.grad, n);
-    };
+        };
     return out;
 }
 
@@ -85,8 +84,8 @@ NodePtr<T> mul(NodePtr<T> a, NodePtr<T> b) {
     Node<T>* o = out.get(); Node<T>* pa = a.get(); Node<T>* pb = b.get();
     out->backward_fn = [o, pa, pb, n]() {
         launch_mul_backward<T>(o->value.grad, pa->value.data, pb->value.data,
-                               pa->value.grad, pb->value.grad, n);
-    };
+            pa->value.grad, pb->value.grad, n);
+        };
     return out;
 }
 
@@ -103,7 +102,7 @@ NodePtr<T> relu(NodePtr<T> x) {
     Node<T>* o = out.get(); Node<T>* px = x.get();
     out->backward_fn = [o, px, n]() {
         launch_relu_backward<T>(o->value.grad, px->value.data, px->value.grad, n);
-    };
+        };
     return out;
 }
 
@@ -124,7 +123,7 @@ NodePtr<T> matmul(NodePtr<T> a, NodePtr<T> b) {
     out->backward_fn = [o, pa, pb, M, N, K]() {
         launch_matmul_backward_A<T>(o->value.grad, pb->value.data, pa->value.grad, M, N, K);
         launch_matmul_backward_B<T>(pa->value.data, o->value.grad, pb->value.grad, M, N, K);
-    };
+        };
     return out;
 }
 
@@ -142,9 +141,9 @@ NodePtr<T> bias_add(NodePtr<T> x, NodePtr<T> b) {
 
     Node<T>* o = out.get(); Node<T>* px = x.get(); Node<T>* pb = b.get();
     out->backward_fn = [o, px, pb, M, N]() {
-        launch_accumulate<T>(px->value.grad, o->value.grad, static_cast<std::size_t>(M) * N); 
+        launch_accumulate<T>(px->value.grad, o->value.grad, static_cast<std::size_t>(M) * N);
         launch_bias_grad<T>(o->value.grad, pb->value.grad, M, N);
-    };
+        };
     return out;
 }
 
@@ -165,148 +164,117 @@ NodePtr<T> softmax_cross_entropy(NodePtr<T> logits, const std::vector<int>& labe
     CUDA_CHECK(cudaMalloc(&dlossp_raw, sizeof(T) * M));
     std::shared_ptr<T> dlossp(dlossp_raw, [](T* p) { cudaFree(p); });
 
+    //convert raw logits into probabiltiies
     launch_softmax_ce_forward<T>(logits->value.data, dlabels.get(), probs->data, dlossp.get(), M, C);
-
-    std::vector<T> hlp(M);
-    CUDA_CHECK(cudaMemcpy(hlp.data(), dlossp.get(), sizeof(T) * M, cudaMemcpyDeviceToHost));
-    //total loss
-    T total = T(0);
-    for (T v : hlp) total += v;
-    total /= T(M);
-
+    //dloss IS NOT DERIVATIVE, IT IS DEVICE LOSS, ITS CONFUSING BUT IM LAZY AND I UNDERSTAND IT
     auto out = std::make_shared<Node<T>>();
     out->value = CudaTensor<T>(std::vector<long long>{ 1 }, true);
     out->op = "softmax_ce";
     out->children = { logits };
-    CUDA_CHECK(cudaMemcpy(out->value.data, &total, sizeof(T), cudaMemcpyHostToDevice));
+    launch_mean_reduce_kernel<T>(dlossp.get(), out->value.data, M);
 
     Node<T>* o = out.get(); Node<T>* pl = logits.get();
 
     out->backward_fn = [o, pl, probs, dlabels, M, C]() {
         launch_softmax_ce_backward<T>(o->value.grad, probs->data, dlabels.get(), pl->value.grad, M, C);
-    };
+        };
     return out;
 }
 
 template<typename T>
 NodePtr<T> conv(NodePtr<T> input, NodePtr<T> filters) {
-    //input = Tensor of [Cin, H, W]
-    //filters are tensor of [Cout, Cin, K1, K2]
-    const int Cin = input->value.shape[0];
-    const int H = input->value.shape[1];
-    const int W = input->value.shape[2];
-    const int Cout = filters->value.shape[0];
-    const int K1 = filters->value.shape[2];
-    const int K2 = filters->value.shape[3];
+    const int N = (int)input->value.shape[0];
+    const int Cin = (int)input->value.shape[1];
+    const int H = (int)input->value.shape[2];
+    const int W = (int)input->value.shape[3];
+    const int Cout = (int)filters->value.shape[0];
+    const int K1 = (int)filters->value.shape[2];
+    const int K2 = (int)filters->value.shape[3];
     const int oH = H - K1 + 1, oW = W - K2 + 1;
 
     auto out = std::make_shared<Node<T>>();
-    CudaTensor<T> scratch({Cout, oH, oW}, true);
-    scratch.zero();
-    out->value = std::move(scratch);
-    CudaTensor<T> tmp({oH, oW}, false);
-    out->children = {input, filters};
+    out->value = CudaTensor<T>(std::vector<long long>{ N, Cout, oH, oW }, true);
+    out->op = "conv";
+    out->children = { input, filters };
 
-    for (int co = 0; co < Cout; co++) {
-        T* outCh = out->value.data + co * oH * oW;
-        for (int kernel = 0; kernel < Cin; kernel++) {
-            const T* inCh = input->value.data + (kernel * H * W);
-            const T* filt = filters->value.data + (co * Cin * K1 * K2 + (kernel * K1 * K2));
-            if (K1 == 3 && K2 == 3) launch_conv2d<T, 3, 3>(inCh, filt, tmp.data, H, W);
-            else if (K1 == 5 && K2 == 5) launch_conv2d<T, 5, 5>(inCh, filt, tmp.data, H, W);
-            launch_accumulate<T>(outCh, tmp.data, oH*oW);
-        }
-    }
-    //forward ^
+    launch_conv2d_forward<T>(input->value.data, filters->value.data, out->value.data,
+        N, Cin, H, W, Cout, K1, K2, oH, oW);
 
-    //backward:
-    Node<T>* o = out.get(),* in = input.get(),* fi = filters.get();
-    //dKernel = conv(cur_in, dOut)
-    //dcur_in = 
-    out->backward_fn = [o, in, fi, Cin, H, W, Cout, K1, K2, oH, oW]() {
-        for (int co = 0; co < Cout; co++) {
-            for (int kernel = 0; kernel < Cin; kernel++) {
-                const T* dOut = o->value.grad + (co * (oH*oW));
-                const T* cur_in = in->value.data + (kernel * (H*W));
-                T* cur_filter_grad = fi->value.grad + (co * Cin * K1 * K2 + (kernel * K1 * K2));
-                launch_conv_dW<T>(cur_in, dOut, cur_filter_grad, W, oH, oW, K1, K2);
-            }
-        }
-        for (int ci = 0; ci < Cin; ++ci) {
-            //what layer am i looking at rn
-            T* dIn = in->value.grad + ci * H * W;
-            for (int co = 0; co < Cout; ++co) { //each layer with its corresponding filter produces some impact on cO find this
-                //these layers each contrinbute to co somewhere
-                const T* dOut = o->value.grad + co * oH * oW;
-                const T* filt = fi->value.data + (co*Cin*K1*K2) + ci*K1*K2;
-                launch_conv_dIn<T>(dOut, filt, dIn, H, W, oH, oW, K1, K2); 
-            }
-        }
-
-    };
+    Node<T>* o = out.get(); Node<T>* in = input.get(); Node<T>* fi = filters.get();
+    out->backward_fn = [o, in, fi, N, Cin, H, W, Cout, K1, K2, oH, oW]() {
+        launch_conv_dW<T>(in->value.data, o->value.grad, fi->value.grad,
+            N, Cin, H, W, Cout, K1, K2, oH, oW);
+        launch_conv_dIn<T>(o->value.grad, fi->value.data, in->value.grad,
+            N, Cin, H, W, Cout, K1, K2, oH, oW);
+        };
     return out;
 }
 
 template<typename T>
 NodePtr<T> conv_bias(NodePtr<T> x, NodePtr<T> bias) {
-    const int C  = static_cast<int>(x->value.shape[0]);
-    const int HW = static_cast<int>(x->value.shape[1] * x->value.shape[2]);
+    const int N = static_cast<int>(x->value.shape[0]);
+    const int C = static_cast<int>(x->value.shape[1]);
+    const int HW = static_cast<int>(x->value.shape[2] * x->value.shape[3]);
 
     auto out = std::make_shared<Node<T>>();
     out->value = CudaTensor<T>(x->value.shape, true);
     out->op = "conv_bias";
     out->children = { x, bias };
 
-    launch_conv_bias<T>(x->value.data, bias->value.data, out->value.data, C, HW);
+    launch_conv_bias<T>(x->value.data, bias->value.data, out->value.data, N, C, HW);
 
     Node<T>* o = out.get(); Node<T>* px = x.get(); Node<T>* pb = bias.get();
-    out->backward_fn = [o, px, pb, C, HW]() {
-        launch_accumulate<T>(px->value.grad, o->value.grad, static_cast<std::size_t>(C) * HW); // pass it back since bias is a constant
-        launch_conv_bias_grad<T>(o->value.grad, pb->value.grad, C, HW);                         // dLoss/dOut * dOut/dGrad <- 1  so its just going to grad of what it touches
-    };
+    out->backward_fn = [o, px, pb, N, C, HW]() {
+        launch_accumulate<T>(px->value.grad, o->value.grad, static_cast<std::size_t>(N) * C * HW); // bias passthrough
+        launch_conv_bias_grad<T>(o->value.grad, pb->value.grad, N, C, HW);
+        };
     return out;
 }
 
 template <typename T>
 NodePtr<T> maxpool(NodePtr<T> input, int pool) {
     NodePtr<T> out = std::make_shared<Node<T>>();
-    const int C = static_cast<int>(input->value.shape[0]);
-    const int H = static_cast<int>(input->value.shape[1]);
-    const int W = static_cast<int>(input->value.shape[2]);
+    const int N = static_cast<int>(input->value.shape[0]);
+    const int C = static_cast<int>(input->value.shape[1]);
+    const int H = static_cast<int>(input->value.shape[2]);
+    const int W = static_cast<int>(input->value.shape[3]);
     const int oH = H / pool, oW = W / pool;
 
-    out->value = CudaTensor<T>({C, oH, oW}, true);
+    out->value = CudaTensor<T>(std::vector<long long>{ N, C, oH, oW }, true);
     out->op = "maxpool";
     out->children = { input };
 
     //kept alive for backwards
     int* argmax_raw = nullptr;
-    CUDA_CHECK(cudaMalloc(&argmax_raw, sizeof(int) * C * oH * oW));
+    CUDA_CHECK(cudaMalloc(&argmax_raw, sizeof(int) * (size_t)N * C * oH * oW));
     std::shared_ptr<int> argmax_cache(argmax_raw, [](int* p) { cudaFree(p); });
 
-    launch_maxpool<T>(input->value.data, out->value.data, argmax_cache.get(), C, H, W, pool, oH, oW);
+    launch_maxpool<T>(input->value.data, out->value.data, argmax_cache.get(), N, C, H, W, pool, oH, oW);
 
-    Node<T>* o = out.get(), *in = input.get();
-    out->backward_fn = [o, in, C, argmax_cache, oH, oW]() {
-        launch_backward_maxpool(o->value.grad, in->value.grad, argmax_cache.get(), C, oH, oW);
-    };
+    Node<T>* o = out.get(), * in = input.get();
+    out->backward_fn = [o, in, N, C, argmax_cache, oH, oW]() {
+        launch_backward_maxpool<T>(o->value.grad, in->value.grad, argmax_cache.get(), N, C, oH, oW);
+        };
     return out;
 }
 
 template<typename T>
 NodePtr<T> flatten(NodePtr<T> input) {
-    const std::size_t N = input->value.size;   // C*H*W
+    const long long N = input->value.shape[0];
+    const std::size_t tot = input->value.size;
+    const long long feat = (long long)(tot / (std::size_t)N);
+
     auto out = std::make_shared<Node<T>>();
-    out->value = CudaTensor<T>(std::vector<long long>{ 1, (long long)N }, true);
+    out->value = CudaTensor<T>(std::vector<long long>{ N, feat }, true);
     out->op = "flatten";
     out->children = { input };
 
     CUDA_CHECK(cudaMemcpy(out->value.data, input->value.data,
-        N * sizeof(T), cudaMemcpyDeviceToDevice));
+        tot * sizeof(T), cudaMemcpyDeviceToDevice));
 
     Node<T>* o = out.get(); Node<T>* px = input.get();
-    out->backward_fn = [o, px, N]() {
-        launch_accumulate<T>(px->value.grad, o->value.grad, N);   // reshape grad straight back
+    out->backward_fn = [o, px, tot]() {
+        launch_accumulate<T>(px->value.grad, o->value.grad, tot);
         };
     return out;
 }

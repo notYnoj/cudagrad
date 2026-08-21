@@ -16,45 +16,45 @@ namespace {
         cudaError_t e = cudaGetLastError();
         if (e != cudaSuccess)
             throw std::runtime_error(std::string("launch ") + what + " failed: "
-                                     + cudaGetErrorString(e));
+                + cudaGetErrorString(e));
     }
 }
 
 template<typename T>
 void launch_add(const T* a, const T* b, T* out, std::size_t n) {
-    add_kernel<T><<<grid(n), BLOCK>>>(a, b, out, n);
+    add_kernel<T> << <grid(n), BLOCK >> > (a, b, out, n);
     check("add");
 }
 template<typename T>
 void launch_mul(const T* a, const T* b, T* out, std::size_t n) {
-    multiply_kernel<T><<<grid(n), BLOCK>>>(a, b, out, n);
+    multiply_kernel<T> << <grid(n), BLOCK >> > (a, b, out, n);
     check("mul");
 }
 template<typename T>
 void launch_relu(const T* x, T* out, std::size_t n) {
-    relu_kernel<T><<<grid(n), BLOCK>>>(x, out, n);
+    relu_kernel<T> << <grid(n), BLOCK >> > (x, out, n);
     check("relu");
 }
 
 template<typename T>
 void launch_fill(T* out, T val, std::size_t n) {
-    fill_kernel<T><<<grid(n), BLOCK>>>(out, val, n);
+    fill_kernel<T> << <grid(n), BLOCK >> > (out, val, n);
     check("fill");
 }
 
 template<typename T>
 void launch_add_backward(const T* gout, T* ga, T* gb, std::size_t n) {
-    add_backward_kernel<T><<<grid(n), BLOCK>>>(gout, ga, gb, n);
+    add_backward_kernel<T> << <grid(n), BLOCK >> > (gout, ga, gb, n);
     check("add_backward");
 }
 template<typename T>
 void launch_mul_backward(const T* gout, const T* a, const T* b, T* ga, T* gb, std::size_t n) {
-    mul_backward_kernel<T><<<grid(n), BLOCK>>>(gout, a, b, ga, gb, n);
+    mul_backward_kernel<T> << <grid(n), BLOCK >> > (gout, a, b, ga, gb, n);
     check("mul_backward");
 }
 template<typename T>
 void launch_relu_backward(const T* gout, const T* x, T* gx, std::size_t n) {
-    relu_backward_kernel<T><<<grid(n), BLOCK>>>(gout, x, gx, n);
+    relu_backward_kernel<T> << <grid(n), BLOCK >> > (gout, x, gx, n);
     check("relu_backward");
 }
 
@@ -76,95 +76,100 @@ void launch_matmul(const T* A, const T* B, T* C, int M, int N, int K) {
 }
 template<typename T>
 void launch_matmul_backward_A(const T* dC, const T* B, T* dA, int M, int N, int K) {
-    matmul_backward_A_kernel<T><<<grid2d(K, M), BLOCK2D>>>(dC, B, dA, M, N, K); 
+    matmul_backward_A_kernel<T> << <grid2d(K, M), BLOCK2D >> > (dC, B, dA, M, N, K);
     check("matmul_backward_A");
 }
 template<typename T>
 void launch_matmul_backward_B(const T* A, const T* dC, T* dB, int M, int N, int K) {
-    matmul_backward_B_kernel<T><<<grid2d(N, K), BLOCK2D>>>(A, dC, dB, M, N, K); 
+    matmul_backward_B_kernel<T> << <grid2d(N, K), BLOCK2D >> > (A, dC, dB, M, N, K);
     check("matmul_backward_B");
 }
 template<typename T>
 void launch_bias_add(const T* in, const T* b, T* out, int M, int N) {
-    bias_add_kernel<T><<<grid(static_cast<std::size_t>(M) * N), BLOCK>>>(in, b, out, M, N);
+    bias_add_kernel<T> << <grid(static_cast<std::size_t>(M) * N), BLOCK >> > (in, b, out, M, N);
     check("bias_add");
 }
 template<typename T>
 void launch_accumulate(T* dst, const T* src, std::size_t n) {
-    accumulate_kernel<T><<<grid(n), BLOCK>>>(dst, src, n);
+    accumulate_kernel<T> << <grid(n), BLOCK >> > (dst, src, n);
     check("accumulate");
 }
 template<typename T>
 void launch_bias_grad(const T* gout, T* db, int M, int N) {
-    bias_grad_kernel<T><<<grid(static_cast<std::size_t>(N)), BLOCK>>>(gout, db, M, N);
+    bias_grad_kernel<T> << <grid(static_cast<std::size_t>(N)), BLOCK >> > (gout, db, M, N);
     check("bias_grad");
 }
 template<typename T>
 void launch_softmax_ce_forward(const T* Z, const int* labels, T* probs, T* lossp, int M, int C) {
-    softmax_ce_forward_kernel<T><<<grid(static_cast<std::size_t>(M)), BLOCK>>>(Z, labels, probs, lossp, M, C);
+    softmax_ce_forward_kernel<T> << <grid(static_cast<std::size_t>(M)), BLOCK >> > (Z, labels, probs, lossp, M, C);
     check("softmax_ce_forward");
 }
 template<typename T>
 void launch_softmax_ce_backward(const T* gscalar, const T* probs, const int* labels, T* dZ, int M, int C) {
-    softmax_ce_backward_kernel<T><<<grid(static_cast<std::size_t>(M) * C), BLOCK>>>(gscalar, probs, labels, dZ, M, C);
+    softmax_ce_backward_kernel<T> << <grid(static_cast<std::size_t>(M) * C), BLOCK >> > (gscalar, probs, labels, dZ, M, C);
     check("softmax_ce_backward");
 }
 template<typename T>
 void launch_sgd_update(T* w, const T* g, T lr, std::size_t n) {
-    sgd_update_kernel<T><<<grid(n), BLOCK>>>(w, g, lr, n);
+    sgd_update_kernel<T> << <grid(n), BLOCK >> > (w, g, lr, n);
     check("sgd_update");
 }
 
 
-template<typename T, int K1, int K2>
-void launch_conv2d(const T* mat, const T* kernel, T* out, int N, int M) {
-    constexpr int TILES = 16;
-    const int outRow = N - K1 + 1;
-    const int outCol = M - K2 + 1;
-    dim3 block(TILES, TILES);
-    dim3 grid((outCol + TILES - 1) / TILES, (outRow + TILES - 1) / TILES);
-    convolution_kernel<T, TILES, K1, K2><<<grid, block>>>(mat, kernel, out, N, M);
-    check("conv2d");
+template<typename T>
+void launch_conv2d_forward(const T* in, const T* filt, T* out,
+    int N, int Cin, int H, int W, int Cout, int K1, int K2, int oH, int oW) {
+    conv2d_forward_kernel<T> << <grid((std::size_t)N * Cout * oH * oW), BLOCK >> > (
+        in, filt, out, N, Cin, H, W, Cout, K1, K2, oH, oW);
+    check("conv2d_forward");
 }
 template<typename T>
-void launch_conv_dW(const T* mat, const T* kernel, T* dW, int W, int oH, int oW, int K1, int K2) {
-    dim3 block(16, 16);
-    dim3 grid((K2 + 15) / 16, (K1 + 15) / 16);
-    dFilter_conv_kernel<T> << <grid, block >> > (mat, kernel, dW, W, oH, oW, K1, K2);
+void launch_conv_dW(const T* in, const T* dOut, T* dW,
+    int N, int Cin, int H, int W, int Cout, int K1, int K2, int oH, int oW) {
+    conv2d_dW_kernel<T> << <grid((std::size_t)Cout * Cin * K1 * K2), BLOCK >> > (
+        in, dOut, dW, N, Cin, H, W, Cout, K1, K2, oH, oW);
     check("conv_dW");
 }
-
 template<typename T>
-void launch_conv_dIn(const T* mat, const T* kernel, T* dIn, int H, int W, int oH, int oW, int K1, int K2) {
-    dim3 block(16, 16);
-    dim3 grid((W + 15) / 16, (H + 15) / 16);
-    dIn_conv_kernel<T> << <grid, block >> > (mat, kernel, dIn, H, W, oH, oW, K1, K2);
+void launch_conv_dIn(const T* dOut, const T* filt, T* dIn,
+    int N, int Cin, int H, int W, int Cout, int K1, int K2, int oH, int oW) {
+    conv2d_dIn_kernel<T> << <grid((std::size_t)N * Cin * H * W), BLOCK >> > (
+        dOut, filt, dIn, N, Cin, H, W, Cout, K1, K2, oH, oW);
     check("conv_dIn");
 }
 
 template <typename T>
-void launch_maxpool(const T* mat, T* out, int* argmax_cache, int C, int H, int W, int pool, int oH, int oW) {
-    maxpool_kernel << <grid(C* oH * oW), BLOCK >> > (mat, out, argmax_cache, C, H, W, pool, oH, oW);
+void launch_maxpool(const T* mat, T* out, int* argmax_cache, int N, int C, int H, int W, int pool, int oH, int oW) {
+    maxpool_kernel<T> << <grid((std::size_t)N * C * oH * oW), BLOCK >> > (mat, out, argmax_cache, N, C, H, W, pool, oH, oW);
     check("maxpool");
 }
 
 template <typename T>
-void launch_backward_maxpool(const T* dOut, T* dIn, const int* argmax_cache, int C, int oH, int oW) {
-    maxpool_backward_kernel << <grid(C* oH * oW), BLOCK >> > (dOut, dIn, argmax_cache, C, oH, oW);
+void launch_backward_maxpool(const T* dOut, T* dIn, const int* argmax_cache, int N, int C, int oH, int oW) {
+    maxpool_backward_kernel<T> << <grid((std::size_t)N * C * oH * oW), BLOCK >> > (dOut, dIn, argmax_cache, N, C, oH, oW);
     check("maxpool_backward");
 }
 
 template <typename T>
-void launch_conv_bias(const T* in, const T* bias, T* out, int C, int HW) {
-    conv_bias_forward_kernel<T><<<grid((std::size_t)C * HW), BLOCK>>>(in, bias, out, C, HW);
+void launch_conv_bias(const T* in, const T* bias, T* out, int N, int C, int HW) {
+    conv_bias_forward_kernel<T> << <grid((std::size_t)N * C * HW), BLOCK >> > (in, bias, out, N, C, HW);
     check("conv_bias");
 }
 template <typename T>
-void launch_conv_bias_grad(const T* dOut, T* dBias, int C, int HW) {
-    conv_bias_grad_kernel<T><<<grid((std::size_t)C), BLOCK>>>(dOut, dBias, C, HW);
+void launch_conv_bias_grad(const T* dOut, T* dBias, int N, int C, int HW) {
+    conv_bias_grad_kernel<T> << <grid((std::size_t)C), BLOCK >> > (dOut, dBias, N, C, HW);
     check("conv_bias_grad");
 }
-
+template<typename T>
+void launch_mean_reduce_kernel(const T* in, T* out, int M) {
+    mean_reduce_kernel<T> << <1, 1 >> > (in, out, M);
+    check("mean_reduce_kernel");
+}
+template<typename T>
+void launch_accumulate_loss_correct(T* in, const T* loss, const T* logits, int* labels, int M, int C) {
+    accumulate_loss_correct<T> << <grid((std::size_t)M), BLOCK >> > (in, loss, logits, labels, M, C);
+    check("accumulate_loss_correct");
+}
 #define INSTANTIATE(T)                                                              \
     template void launch_add<T>(const T*, const T*, T*, std::size_t);               \
     template void launch_mul<T>(const T*, const T*, T*, std::size_t);               \
@@ -182,24 +187,16 @@ void launch_conv_bias_grad(const T* dOut, T* dBias, int C, int HW) {
     template void launch_softmax_ce_forward<T>(const T*, const int*, T*, T*, int, int); \
     template void launch_softmax_ce_backward<T>(const T*, const T*, const int*, T*, int, int); \
     template void launch_sgd_update<T>(T*, const T*, T, std::size_t); \
-    template void launch_conv_dW<T>(const T*, const T*, T*, int, int ,int ,int, int); \
-    template void launch_conv_dIn<T>(const T*, const T*, T*, int, int, int, int, int, int); \
-    template void launch_maxpool<T>(const T*, T*, int*, int, int, int, int, int, int); \
-    template void launch_backward_maxpool<T>(const T*, T*, const int*, int, int, int); \
-    template void launch_conv_bias<T>(const T*, const T*, T*, int, int);               \
-    template void launch_conv_bias_grad<T>(const T*, T*, int, int); \
+    template void launch_conv2d_forward<T>(const T*, const T*, T*, int,int,int,int,int,int,int,int,int); \
+    template void launch_conv_dW<T>(const T*, const T*, T*, int,int,int,int,int,int,int,int,int); \
+    template void launch_conv_dIn<T>(const T*, const T*, T*, int,int,int,int,int,int,int,int,int); \
+    template void launch_maxpool<T>(const T*, T*, int*, int,int,int,int,int,int,int); \
+    template void launch_backward_maxpool<T>(const T*, T*, const int*, int,int,int,int); \
+    template void launch_conv_bias<T>(const T*, const T*, T*, int,int,int);               \
+    template void launch_conv_bias_grad<T>(const T*, T*, int,int,int); \
+    template void launch_mean_reduce_kernel<T>(const T*, T*, int); \
+    template void launch_accumulate_loss_correct<T> (T*, const T*, const T*, int*, int, int); \
 
 INSTANTIATE(float)
 INSTANTIATE(double)
 #undef INSTANTIATE
-
-// conv2d carries extra compile-time template params (the kernel size), so it is
-// instantiated separately — one line per (dtype, K1, K2) the CNN uses.
-#define INSTANTIATE_CONV(T, K1, K2) \
-    template void launch_conv2d<T, K1, K2>(const T*, const T*, T*, int, int);
-
-INSTANTIATE_CONV(float, 3, 3)
-INSTANTIATE_CONV(float, 5, 5)
-INSTANTIATE_CONV(double, 3, 3)
-INSTANTIATE_CONV(double, 5, 5)
-#undef INSTANTIATE_CONV

@@ -33,9 +33,10 @@ struct SGD {
     std::function<T(std::size_t, std::size_t, T, T)> lr_scheduler;
 
     explicit SGD(T lrMax = T(0.01), T lrMin = T(1e-6), size_t totalEpochs = 20,
-                 std::function<T(std::size_t, std::size_t, T, T)> sched = linear_LR<T>)
+        std::function<T(std::size_t, std::size_t, T, T)> sched = linear_LR<T>)
         : lr(lrMax), lrMax(lrMax), lrMin(lrMin), totalEpochs(totalEpochs),
-          lr_scheduler(std::move(sched)) {}
+        lr_scheduler(std::move(sched)) {
+    }
 
     void add(NodePtr<T> p) { params.push_back(std::move(p)); }
 
@@ -44,10 +45,8 @@ struct SGD {
     void step() {
         for (auto& p : params)
             launch_sgd_update<T>(p->value.data, p->value.grad, lr, p->value.size);
-        CUDA_CHECK(cudaDeviceSynchronize());
     }
 
-    //update LR
     void stepEpoch() {
         epoch++;
         lr = lr_scheduler(epoch, totalEpochs, lrMax, lrMin);
@@ -79,7 +78,7 @@ struct Conv : public Module<T> {
     NodePtr<T> filters;
     NodePtr<T> bias;
     Conv(SGD<T>& opt, long long Cin, long long Cout, long long kernelSize) {
-        Tensor<T> filter(std::vector<long long> {Cout, Cin, kernelSize, kernelSize}, Init::He, Cin*kernelSize*kernelSize);
+        Tensor<T> filter(std::vector<long long> {Cout, Cin, kernelSize, kernelSize}, Init::He, Cin* kernelSize* kernelSize);
         filters = leaf(filter);
         Tensor<T> b(std::vector<long long> {Cout}, Init::Zero);
         bias = leaf(b);
@@ -87,6 +86,14 @@ struct Conv : public Module<T> {
         opt.add(bias);
     }
     NodePtr<T> forward(NodePtr<T> input) override {
+        //think abt the shared_pointers
+        //input and filters stored in this object
+        /* conv(a,b) -> return temp ptr to object
+            then conv_bias(conv(a,b), bias)
+            this returns a temp pointer to a new object with the temp ptr++ and object
+            so temp ptr has a ref count of 2 at end of semi colon it gets -- 
+            so that ptr to the other object remains cuz its in conv_bias childrne
+        */
         NodePtr<T> y = relu(conv_bias(conv(input, filters), bias));
         return y;
     }
