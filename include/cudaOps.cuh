@@ -284,27 +284,30 @@ __global__ void conv2d_forward_kernel(const U* __restrict__ in, const U* __restr
 }
 
 // dW[co,ci,ki,kj] += sum n,oh,ow in[n,ci,oh+ki,ow+kj] * dOut[n,co,oh,ow]
+
+// grid = (P, S): blockIdx.x = weight p, blockIdx.y = chunk of the R = N*oH*oW terms
 template<typename U>
-__global__ void conv2d_dW_kernel(const U* __restrict__ in, const U* __restrict__ dOut,
-    U* __restrict__ dW,
-    int N, int Cin, int H, int W,
-    int Cout, int K1, int K2, int oH, int oW) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= Cout * Cin * K1 * K2) return;
-    int kj = idx % K2;
-    int ki = (idx / K2) % K1;
-    int ci = (idx / (K2 * K1)) % Cin;
-    int co = idx / (K2 * K1 * Cin);
+__global__ void conv2d_dW_kernel(const U* __restrict__ in, const U* __restrict__ dOut, U* __restrict__ dW,
+                                 int N, int Cin, int H, int W, int Cout, int K1, int K2, int oH, int oW,
+                                 int chunk) {
+    __shared__ U partial[256];
+
+    // TODO: decode p = blockIdx.x into (co, ci, ki, kj).
+    //       Your current kernel already does this from 'idx'; reuse those four lines with p instead.
+
+    // TODO: R, r0, r1 exactly as in the bias kernel (what is R here?)
 
     U acc = U(0);
-    for (int n = 0; n < N; ++n) {
-        const U* img = in + ((size_t)n * Cin + ci) * H * W;
-        const U* dImg = dOut + ((size_t)n * Cout + co) * oH * oW;
-        for (int oh = 0; oh < oH; ++oh)
-            for (int ow = 0; ow < oW; ++ow)
-                acc += img[(oh + ki) * W + (ow + kj)] * dImg[oh * oW + ow];
+    for (/* TODO: same strided loop as the bias kernel */) {
+        // TODO: decode r into (n, oh, ow). Make ow the fastest-changing one.
+        //       Hint: oH*oW terms per image, oW terms per row.
+        // TODO: acc += in[...] * dOut[...]
+        //       Your current kernel's inner line has the right math. Only the way you get
+        //       n, oh, ow changed (from three loops to one decoded r).
     }
-    dW[idx] += acc;
+
+    // TODO: the same tree reduction as the bias kernel
+    // TODO: the same atomicAdd, into dW[p]
 }
 
 // dIn[n,ci,h,w] += sum_{co,ki,kj valid} dOut[n,co,h-ki,w-kj] * filt[co,ci,ki,kj]
@@ -348,18 +351,44 @@ __global__ void conv_bias_forward_kernel(const U* __restrict__ in, const U* __re
 
 
 // dBias[c] += sum over all examples and HW (of dOut)
+// grid = (C, S): blockIdx.x = channel, blockIdx.y = which chunk of the R = N*HW terms
 template<typename U>
 __global__ void conv_bias_grad_kernel(const U* __restrict__ dOut, U* __restrict__ dBias,
-    int N, int C, int HW) {
-    int c = blockIdx.x * blockDim.x + threadIdx.x;
-    if (c < C) {
-        U acc = U(0);
-        for (int n = 0; n < N; ++n) {
-            //n*C*HW first stack + then c * HW for prev stacks we start here and then we just add up (0-8) start 9 
-            const U* d = dOut + ((size_t)n * C + c) * HW;
-            for (int i = 0; i < HW; ++i) acc += d[i];
+                                      int N, int C, int HW, int chunk) {
+    
+    __shared__ U partial[256];                 // one slot per thread; must match the block size
+
+    const int c  = blockIdx.x;                 // which channel bias this block works on
+    const int R  = N * HW;                     // total in this bias's sum
+    const int r0 = blockIdx.y * chunk;         // this block's chunk: terms [r0, r1)
+    const int r1 = min(r0 + chunk, R);
+
+    // ---- step 1: each thread sums a strided slice of the chunk
+    U acc = U(0);
+    for (int r = r0 + threadIdx.x; r < r1; r += blockDim.x) {
+        // TODO: decode r into (n, hw). Term r is the r-th value of channel c across all images.
+        //       Hint: there are HW values per image.
+
+        int n  = r / HW; //there are HW values per example thus this is our example 
+        int hw = r % HW;  //mod to get the pixel within the channel at the current example
+        acc += dOut[n * C * HW  + c * HW + hw];
+    }
+
+    // ---- step 2: tree reduction of the 256 partial sums in shared memory
+    partial[threadIdx.x] = acc;
+    __syncthreads();
+    for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+        if (threadIdx.x < stride) {
+            // TODO: one line. Thread t adds the value 'stride' slots away into its own slot.
+            partial[threadIdx.x] += partial[threadIdx.x + stride];
         }
-        dBias[c] += acc;
+        __syncthreads();                       // outside the if: every thread must reach it
+    }
+
+    // ---- step 3: one thread adds the block's total into the output
+    if (threadIdx.x == 0) {
+        // TODO: atomicAdd the block total (which slot holds it now?) into dBias[c]
+        atomicAdd(&dBias[c], partial[0]);
     }
 }
 

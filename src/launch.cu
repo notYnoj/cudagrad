@@ -155,9 +155,15 @@ void launch_conv_bias(const T* in, const T* bias, T* out, int N, int C, int HW) 
     conv_bias_forward_kernel<T> << <grid((std::size_t)N * C * HW), BLOCK >> > (in, bias, out, N, C, HW);
     check("conv_bias");
 }
+
 template <typename T>
 void launch_conv_bias_grad(const T* dOut, T* dBias, int N, int C, int HW) {
-    conv_bias_grad_kernel<T> << <grid((std::size_t)C), BLOCK >> > (dOut, dBias, N, C, HW);
+    const int R = N * HW;
+    const int chunk = BLOCK * 16;                        // 256 threads x 16 terms each
+    //1 row per channel
+    //we have
+    dim3 grid2(C, (R + chunk - 1)/chunk);
+    conv_bias_grad_kernel<T><<<grid2, BLOCK>>>(dOut, dBias, N, C, HW, chunk);
     check("conv_bias_grad");
 }
 template<typename T>
