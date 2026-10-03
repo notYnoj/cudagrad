@@ -52044,3 +52044,80 @@ events:
         - "C:/Program Files/CMake"
         - "C:/Program Files (x86)/cudagrad"
 ...
+
+---
+events:
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/FindCUDAToolkit.cmake:1101 (find_path)"
+      - "CMakeLists.txt:9 (find_package)"
+    mode: "path"
+    variable: "CUDAToolkit_CUBLAS_INCLUDE_DIR"
+    description: "Path to a file."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "cublas_v2.h"
+    candidate_directories:
+      - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/include/"
+      - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/include/cccl/"
+    found: "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.3/include/"
+    search_context:
+      ENV{PATH}:
+        - "C:\\Users\\Ynoj\\bin"
+        - "C:\\Program Files\\Git\\mingw64\\bin"
+        - "C:\\Program Files\\Git\\usr\\local\\bin"
+        - "C:\\Program Files\\Git\\usr\\bin"
+        - "C:\\Program Files\\Git\\usr\\bin"
+        - "C:\\Program Files\\Git\\mingw64\\bin"
+        - "C:\\Program Files\\Git\\usr\\bin"
+        - "C:\\Users\\Ynoj\\bin"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.3\\bin\\x64"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.3\\bin"
+        - "C:\\Program Files\\Common Files\\Oracle\\Java\\javapath"
+        - "C:\\WINDOWS\\system32"
+        - "C:\\WINDOWS"
+        - "C:\\WINDOWS\\System32\\Wbem"
+        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0"
+        - "C:\\WINDOWS\\System32\\OpenSSH"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit"
+        - "C:\\Program Files\\NVIDIA Corporation\\Nsight Compute 2026.2.0"
+        - "C:\\Program Files\\dotnet"
+        - "C:\\Users\\Ynoj\\AppData\\Local\\Programs\\Python\\Python314\\Scripts"
+        - "C:\\Users\\Ynoj\\AppData\\Local\\Programs\\Python\\Python314"
+        - "C:\\msys64\\ucrt64\\bin"
+        - "C:\\Users\\Ynoj\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\msys64\\bin\\git"
+        - "C:\\Program Files\\JetBrains\\CLion 2026.1.2\\bin"
+        - "C:\\Program Files\\JetBrains\\PyCharm 2026.1.2\\bin"
+        - "C:\\msys64\\mingw64\\bin"
+        - "C:\\Users\\Ynoj\\.dotnet\\tools"
+        - "C:\\Users\\Ynoj\\AppData\\Local\\GitHubDesktop\\bin"
+        - "C:\\Users\\Ynoj\\AppData\\Local\\Programs\\Python\\Python314"
+        - "C:\\Program Files\\Git\\mingw64\\bin"
+        - "C:\\Program Files\\Git\\usr\\bin\\vendor_perl"
+        - "C:\\Program Files\\Git\\usr\\bin\\core_perl"
+        - "C:\\Users\\Ynoj\\AppData\\Roaming\\Claude\\local-agent-mode-sessions\\327acd21-de37-4c3c-9f3c-6ed5f953f259\\c01f3d2b-be5a-430b-a53b-b2a844b70cf9\\rpm\\plugin_011v5h6QUzBZvas64y44XLhy\\bin"
+        - "C:\\Users\\Ynoj\\AppData\\Roaming\\Claude\\local-agent-mode-sessions\\327acd21-de37-4c3c-9f3c-6ed5f953f259\\c01f3d2b-be5a-430b-a53b-b2a844b70cf9\\rpm\\plugin_014WxCYbLf7f3uw2isHFR9US\\bin"
+        - "C:\\Users\\Ynoj\\AppData\\Roaming\\Claude\\local-agent-mode-sessions\\327acd21-de37-4c3c-9f3c-6ed5f953f259\\c01f3d2b-be5a-430b-a53b-b2a844b70cf9\\rpm\\plugin_01FTLa86dhbVJ3HB1LdHdhN7\\bin"
+        - "C:\\Users\\Ynoj\\AppData\\Roaming\\Claude\\local-agent-mode-sessions\\327acd21-de37-4c3c-9f3c-6ed5f953f259\\c01f3d2b-be5a-430b-a53b-b2a844b70cf9\\rpm\\plugin_01KmRfL8EXGF3PeqMRzef1TR\\bin"
+        - "C:\\Users\\Ynoj\\AppData\\Roaming\\Claude\\local-agent-mode-sessions\\327acd21-de37-4c3c-9f3c-6ed5f953f259\\c01f3d2b-be5a-430b-a53b-b2a844b70cf9\\rpm\\plugin_01VTbvGZYaCVU2CNSvhDCnkg\\bin"
+        - "C:\\Users\\Ynoj\\AppData\\Roaming\\Claude\\local-agent-mode-sessions\\skills-plugin\\c01f3d2b-be5a-430b-a53b-b2a844b70cf9\\327acd21-de37-4c3c-9f3c-6ed5f953f259\\bin"
+      CMAKE_INSTALL_PREFIX: "C:/Program Files (x86)/cudagrad"
+      CMAKE_SYSTEM_PREFIX_PATH:
+        - "C:/Program Files"
+        - "C:/Program Files (x86)"
+        - "C:/Program Files/CMake"
+        - "C:/Program Files (x86)/cudagrad"
+...

@@ -1,0 +1,4 @@
+C:/Users/Ynoj/source/repos/cudagrad/bench/build/CMakeFiles/cudagrad_train.dir
+C:/Users/Ynoj/source/repos/cudagrad/bench/build/CMakeFiles/cudagrad_capi.dir
+C:/Users/Ynoj/source/repos/cudagrad/bench/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/Ynoj/source/repos/cudagrad/bench/build/CMakeFiles/ZERO_CHECK.dir

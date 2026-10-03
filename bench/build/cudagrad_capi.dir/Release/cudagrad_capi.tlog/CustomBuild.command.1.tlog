@@ -1,0 +1,10 @@
+^C:\USERS\YNOJ\SOURCE\REPOS\CUDAGRAD\BENCH\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/Ynoj/source/repos/cudagrad/bench -BC:/Users/Ynoj/source/repos/cudagrad/bench/build --check-stamp-file C:/Users/Ynoj/source/repos/cudagrad/bench/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
