@@ -296,18 +296,47 @@ __global__ void conv2d_dW_kernel(const U* __restrict__ in, const U* __restrict__
     //       Your current kernel already does this from 'idx'; reuse those four lines with p instead.
 
     // TODO: R, r0, r1 exactly as in the bias kernel (what is R here?)
+    const int p = blockIdx.x; //blockIdx.y = "chunk "
+    const int R = N * oH * oW;
+    const int r0 = blockIdx.y * chunk;
+    const int r1 = min(R, r0 + chunk);
+
+    const int co = p / (Cin * K1 * K2);
+    const int cin = (p % (Cin * K1 * K2)) / (K1* K2); //p = co * (Cin * K1 * K2) + ci * (K1 * K2) + ki * K2 + kj
+    const int ki = (p % (K1*K2)) / K2;
+    const int kj = p % K2;
 
     U acc = U(0);
-    for (/* TODO: same strided loop as the bias kernel */) {
-        // TODO: decode r into (n, oh, ow). Make ow the fastest-changing one.
-        //       Hint: oH*oW terms per image, oW terms per row.
-        // TODO: acc += in[...] * dOut[...]
-        //       Your current kernel's inner line has the right math. Only the way you get
-        //       n, oh, ow changed (from three loops to one decoded r).
+    /*
+    gridDim	number of blocks in each direction	(72, 22, 1)
+    blockIdx	which block this is	.x = weight p (0–71), .y = chunk (0–21)
+    blockDim	number of threads in each block	(256, 1, 1) .x = # of threads
+    threadIdx	which thread within its block	x = 0–255
+    */
+    for (int r = r0 + threadIdx.x; r < r1; r+=blockDim.x) {
+        const int n  = r / (oH * oW);
+        const int oh = (r % (oH * oW)) / oW;
+        const int ow = r % oW;
+
+        const U x = in[n * (Cin * H * W) + cin * (H * W) + (oh + ki) * W + (ow + kj)];
+        const U g = dOut[n * (Cout * oH * oW) + co * (oH * oW) + oh * oW + ow];
+
+        acc += x * g;
     }
 
+    partial[threadIdx.x] = acc;
+    __syncthreads();
+    //256 block dim?
+    for(int stride = blockDim.x / 2; stride > 0; stride/=2){
+        if(threadIdx.x < stride){
+            partial[threadIdx.x] += partial[threadIdx.x + stride];
+        }
+        __syncthreads();
+    }
     // TODO: the same tree reduction as the bias kernel
-    // TODO: the same atomicAdd, into dW[p]
+    if(threadIdx.x == 0){
+        atomicAdd(&dW[p], partial[0]); 
+    }
 }
 
 // dIn[n,ci,h,w] += sum_{co,ki,kj valid} dOut[n,co,h-ki,w-kj] * filt[co,ci,ki,kj]

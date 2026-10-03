@@ -126,8 +126,12 @@ void launch_conv2d_forward(const T* in, const T* filt, T* out,
 template<typename T>
 void launch_conv_dW(const T* in, const T* dOut, T* dW,
     int N, int Cin, int H, int W, int Cout, int K1, int K2, int oH, int oW) {
-    conv2d_dW_kernel<T> << <grid((std::size_t)Cout * Cin * K1 * K2), BLOCK >> > (
-        in, dOut, dW, N, Cin, H, W, Cout, K1, K2, oH, oW);
+    const int R = N * oH * oW;
+    const int chunk = BLOCK * 16;
+    const int P = Cout * Cin * K1 * K2;
+    dim3 grid2(P, (R+chunk-1)/chunk);
+
+    conv2d_dW_kernel<T><<<grid2, BLOCK>>>(in, dOut, dW, N, Cin, H, W, Cout, K1, K2, oH, oW, chunk);
     check("conv_dW");
 }
 template<typename T>
@@ -206,3 +210,11 @@ void launch_accumulate_loss_correct(T* in, const T* loss, const T* logits, int* 
 INSTANTIATE(float)
 INSTANTIATE(double)
 #undef INSTANTIATE
+
+
+/*
+Nsight magic:
+
+& "C:\Program Files\NVIDIA Corporation\Nsight Compute 2026.2.0\target\windows-desktop-win7-x64\ncu.exe" --set full -k "regex:conv2d_dW|conv_bias_grad|conv2d_forward|conv2d_dIn|matmul" --launch-skip 100 --launch-count 18 -o bench\prof\cudagrad_kernels_splitk -f bench\build\Release\cudagrad_train.exe 1 C:/Users/Ynoj/Desktop/Portfolio-Dev-Projects-/WordHuntAI/data 12
+
+*/
