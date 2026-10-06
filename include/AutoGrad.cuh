@@ -25,7 +25,7 @@ struct Module {
 
 template<typename T>
 struct SGD {
-//params are all the weights we must walk back on and apply SGD on
+//params are all the weights/biases we must walk back on and apply SGD on
     std::vector<NodePtr<T>> params;
     T lr;
     T lrMax, lrMin;
