@@ -1,0 +1,7 @@
+jupyter==1.1.1
+matplotlib==3.11.2
+notebook==7.6.3
+numpy==2.5.3
+pandas==3.0.6
+torch==2.14.1
+torchvision==0.29.1
