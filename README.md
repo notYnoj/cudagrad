@@ -125,16 +125,5 @@ python bench/bench.py --data path/to/emnist --epochs 3 --repeats 10
 Full documentation, including all options, how the three trainers are built, and how to reproduce
 the Nsight profiles, is in [bench/README.md](bench/README.md).
 
-## Roadmap
 
-In order of measured impact:
 
-1. **Split-K reduction for `conv2d_dW` and `conv_bias_grad`.** Spread each output's
-   N·oH·oW-term sum across many blocks: a shared-memory tree reduction, then `atomicAdd`. This
-   targets 95% of GPU time.
-2. **A caching allocator** that reuses device buffers between steps instead of calling
-   `cudaMalloc`/`cudaFree`. This targets the 1.36× engine gap.
-3. **Skip unneeded gradients.** The first conv's input-image gradient is computed and never used.
-4. **A no-grad mode for evaluation.** Evaluation currently builds the full graph, which is why
-   cudagrad's eval takes 0.40 s against PyTorch's 0.09 s.
-5. **Register-blocked / implicit-GEMM convolution and fused conv + bias + ReLU kernels.**
