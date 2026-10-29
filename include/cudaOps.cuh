@@ -391,8 +391,7 @@ __global__ void conv_bias_grad_kernel(const U* __restrict__ dOut, U* __restrict_
     // ---- step 1: each thread sums a strided slice of the chunk
     U acc = U(0);
     for (int r = r0 + threadIdx.x; r < r1; r += blockDim.x) {
-        // TODO: decode r into (n, hw). Term r is the r-th value of channel c across all images.
-        //       Hint: there are HW values per image.
+        //Term r is the r-th value of channel c across all images.
 
         int n  = r / HW; //there are HW values per example thus this is our example 
         int hw = r % HW;  //mod to get the pixel within the channel at the current example
@@ -404,7 +403,7 @@ __global__ void conv_bias_grad_kernel(const U* __restrict__ dOut, U* __restrict_
     __syncthreads();
     for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
         if (threadIdx.x < stride) {
-            // TODO: one line. Thread t adds the value 'stride' slots away into its own slot.
+            //thread t adds the value stried slots away into its own slot.
             partial[threadIdx.x] += partial[threadIdx.x + stride];
         }
         __syncthreads();                       // outside the if: every thread must reach it
@@ -412,7 +411,7 @@ __global__ void conv_bias_grad_kernel(const U* __restrict__ dOut, U* __restrict_
 
     // ---- step 3: one thread adds the block's total into the output
     if (threadIdx.x == 0) {
-        // TODO: atomicAdd the block total (which slot holds it now?) into dBias[c]
+        //atomicAdd the block total into dBias[c]
         atomicAdd(&dBias[c], partial[0]);
     }
 }
