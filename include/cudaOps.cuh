@@ -292,10 +292,7 @@ __global__ void conv2d_dW_kernel(const U* __restrict__ in, const U* __restrict__
                                  int chunk) {
     __shared__ U partial[256];
 
-    // TODO: decode p = blockIdx.x into (co, ci, ki, kj).
-    //       Your current kernel already does this from 'idx'; reuse those four lines with p instead.
 
-    // TODO: R, r0, r1 exactly as in the bias kernel (what is R here?)
     const int p = blockIdx.x; //blockIdx.y = "chunk "
     const int R = N * oH * oW;
     const int r0 = blockIdx.y * chunk;
@@ -333,7 +330,6 @@ __global__ void conv2d_dW_kernel(const U* __restrict__ in, const U* __restrict__
         }
         __syncthreads();
     }
-    // TODO: the same tree reduction as the bias kernel
     if(threadIdx.x == 0){
         atomicAdd(&dW[p], partial[0]); 
     }
