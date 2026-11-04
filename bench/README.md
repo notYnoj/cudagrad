@@ -121,3 +121,8 @@ On Windows:
   Manage GPU Performance Counters.
 - Under Nsight Compute the GPU clock is fixed and kernels are replayed, so take wall-clock
   numbers from `bench.py` or Nsight Systems.
+
+
+note for yourself:
+C:/Users/Ynoj/Desktop/Portfolio-Dev-Projects-/WordHuntAI/data
+is the path to emnist
