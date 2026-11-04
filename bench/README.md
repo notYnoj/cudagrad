@@ -119,6 +119,5 @@ Open the `.ncu-rep` in `ncu-ui` and sort the Summary page by *Runtime Improvemen
 On Windows:
 - Nsight Compute needs GPU performance counters enabled: NVIDIA Control Panel → Developer →
   Manage GPU Performance Counters.
-- Call `ncu.exe` directly rather than `ncu.bat`, because the batch wrapper splits the regex at `|`.
 - Under Nsight Compute the GPU clock is fixed and kernels are replayed, so take wall-clock
   numbers from `bench.py` or Nsight Systems.
