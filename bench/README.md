@@ -111,7 +111,7 @@ nsys stats -r cuda_gpu_kern_sum,cuda_api_sum bench/prof/cudagrad_300.nsys-rep
 **Nsight Compute** gives per-kernel occupancy, throughput, stall reasons and per-line source
 hotspots (the build uses `-lineinfo`):
 ```bash
-ncu --set full -k "regex:conv2d_dW|conv_bias_grad|conv2d_forward|conv2d_dIn|matmul" --launch-skip 100 --launch-count 18 -o bench/prof/cudagrad_kernels bench/build/Release/cudagrad_train.exe 1 path/to/emnist 12
+ncu --set full -o bench/prof/cudagrad_kernels bench/build/Release/cudagrad_train.exe 1 path/to/emnist 12
 ```
 
 Open the `.ncu-rep` in `ncu-ui` and sort the Summary page by *Runtime Improvement*.
