@@ -100,13 +100,7 @@ Measured results are in the [top-level README](../README.md#results).
 ## Profiling
 
 Profile the native trainer: `cudagrad_train.exe <epochs> <data_dir> [max_batches]`. The
-third argument limits batches per epoch, to keep profiles short.
-
-**Nsight Systems** shows each kernel's share of GPU time and counts CUDA API calls:
-```bash
-nsys profile --trace cuda -o bench/prof/cudagrad_300 bench/build/Release/cudagrad_train.exe 1 path/to/emnist 300
-nsys stats -r cuda_gpu_kern_sum,cuda_api_sum bench/prof/cudagrad_300.nsys-rep
-```
+third argument limits batches per epoch, to keep profiles short (theres overhead).
 
 **Nsight Compute** gives per-kernel occupancy, throughput, stall reasons and per-line source
 hotspots (the build uses `-lineinfo`):
