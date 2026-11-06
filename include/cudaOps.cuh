@@ -1,5 +1,6 @@
 /* DOCS:
-This is where 
+TODO: For all the split k reduction i hard coded values for my partial sums, in order to make this more general, we should take in a template parameter of block size
+in order to call __shared__ partial[blockDim] or we can use dynamic shared memory and calculate blockSize * sizeof(T) <<<grid,block, shmem_bytes>>>
 */
 
 #pragma once
