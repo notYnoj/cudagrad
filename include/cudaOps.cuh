@@ -290,7 +290,7 @@ template<typename U>
 __global__ void conv2d_dW_kernel(const U* __restrict__ in, const U* __restrict__ dOut, U* __restrict__ dW,
                                  int N, int Cin, int H, int W, int Cout, int K1, int K2, int oH, int oW,
                                  int chunk) {
-    __shared__ U partial[256];
+    __shared__ U partial[256]; //block size is 256
 
 
     const int p = blockIdx.x; //blockIdx.y = "chunk "
